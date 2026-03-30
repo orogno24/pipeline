@@ -7,7 +7,7 @@ pipeline {
             branch: 'main',
             branchFilter: 'origin/(.*)',
             defaultValue: 'latest',
-            useRepository: 'http://gitea-http:3000/admin/msaproject.git',
+            useRepository: 'http://gitea-http:3000/genie/legal.git',
             sortMode: 'DESCENDING_SMART'
         )
         choice(
@@ -29,34 +29,34 @@ pipeline {
 
     environment {
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
-        SONAR_PROJECT_KEY = 'afterloan'
-        SONAR_PROJECT_NAME = 'afterloan'
+        SONAR_PROJECT_KEY = 'legal'
+        SONAR_PROJECT_NAME = 'legal'
 
         // ── Git 소스 ─────────────────────────────────────────────────
-        GIT_URL                        = 'http://gitea-http:3000/admin/msaproject.git'
+        GIT_URL                        = 'http://gitea-http:3000/genie/legal.git'
         GIT_CREDENTIALS_ID             = 'gitea-credentials'
         GIT_BRANCH                     = 'main'
 
         // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
-        GITOPS_URL                     = 'http://gitea-http:3000/genie/afterloan.git'
-        GITOPS_PATH                    = 'gitea-http:3000/admin/msaproject-gitops.git'
-        GITOPS_API_URL                 = 'http://gitea-http:3000/api/v1/repos/admin/kustomize'
+        GITOPS_URL                     = 'http://gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_PATH                    = 'gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_API_URL                 = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize.git'
         GITOPS_CREDENTIALS_ID          = 'gitea-credentials'
         GITOPS_BRANCH                  = 'main'
-        GITOPS_DIR                     = 'backend/backend-svc/overlay/dev'
-        GITOPS_CONTAINER_NAME          = 'backend'
+        GITOPS_DIR                     = 'legal/overlay/dev'
+        GITOPS_CONTAINER_NAME          = 'legal'
 
         // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL            = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS        = 'harbor.dev.jtcsb.co.kr'
         DOCKER_PROJECT_NAME            = 'msaproject'
-        DOCKER_IMAGE_NAME              = 'msaproject/backend'
-        DOCKER_REPO_NAME               = 'backend'
-        DOCKER_IMAGE_URL               = 'harbor.dev.jtcsb.co.kr/msaproject/backend'
+        DOCKER_IMAGE_NAME              = 'msaproject/legal'
+        DOCKER_REPO_NAME               = 'legal'
+        DOCKER_IMAGE_URL               = 'harbor.dev.jtcsb.co.kr/msaproject/legal'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-credentials'
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
-        BUILD_CONTEXT                  = 'backend'
+        BUILD_CONTEXT                  = 'legal'
     }
 
     stages {
