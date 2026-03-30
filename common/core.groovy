@@ -9,7 +9,7 @@ def checkout() {
                 credentialsId: env.GIT_CREDENTIALS_ID,
             )
 
-            env.APP_VERSION = params.SELECTED_TAG
+            env.APP_VERSION = env.APP_VERSION ?: params.SELECTED_TAG
             if (params.SELECTED_TAG) {
                 def tagExists = sh(
                     script: "git tag -l ${params.SELECTED_TAG}",
@@ -662,6 +662,65 @@ def transferSourceArchiveToFtc(String sourceDir = 'source') {
         } catch (err) {
             echo("[Transfer Source Archive To FTC] 실패: ${err}")
             error("FTC 소스 압축 전송 단계에서 오류 발생")
+        }
+    }
+}
+
+def checkTag(String repoName, String headSha) {
+    stage('Tag 확인') {
+        try {
+            echo("===============[Tag 확인] 단계 시작===============")
+
+            def tagsResponse = httpRequest(
+                url: "http://gitea-http.cicd.svc.cluster.local:3000/api/v1/repos/admin/${repoName}/tags",
+                authentication: 'gitea-credentials',
+                validResponseCodes: '100:499'
+            )
+
+            def tags = readJSON text: tagsResponse.content
+            def matchedTag = tags.find { it.commit.sha == headSha }
+
+            if (!matchedTag) {
+                echo "❌ Tag가 없습니다. 빌드배포를 위해 Tag가 필수입니다."
+                currentBuild.result = 'ABORTED'
+                error("Tag 없음으로 파이프라인 종료")
+            }
+
+            env.APP_VERSION = matchedTag.name
+            echo "✅ Tag 확인: ${env.APP_VERSION}"
+
+            echo("===============[Tag 확인] 단계 종료===============")
+        } catch (err) {
+            echo("[Tag 확인] 실패: ${err}")
+            error("Tag 확인 단계에서 오류 발생")
+        }
+    }
+}
+
+def mergePR(String repoName, String prNumber) {
+    stage('PR Merge') {
+        try {
+            echo("===============[PR Merge] 단계 시작===============")
+
+            def mergeResponse = httpRequest(
+                httpMode: 'POST',
+                url: "http://gitea-http.cicd.svc.cluster.local:3000/api/v1/repos/admin/${repoName}/pulls/${prNumber}/merge",
+                authentication: 'gitea-credentials',
+                contentType: 'APPLICATION_JSON',
+                requestBody: '{"Do": "merge", "merge_message_field": "Auto merged by Jenkins"}',
+                validResponseCodes: '100:499'
+            )
+
+            if (mergeResponse.status == 200) {
+                echo "✅ Merge 완료 - ${repoName} PR #${prNumber}"
+            } else {
+                error("Merge 실패 - ${mergeResponse.status}")
+            }
+
+            echo("===============[PR Merge] 단계 종료===============")
+        } catch (err) {
+            echo("[PR Merge] 실패: ${err}")
+            error("PR Merge 단계에서 오류 발생")
         }
     }
 }
