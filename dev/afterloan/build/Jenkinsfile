@@ -7,7 +7,7 @@ pipeline {
             branch: 'main',
             branchFilter: 'origin/(.*)',
             defaultValue: 'latest',
-            useRepository: 'http://gitea-http:3000/admin/msaproject.git',
+            useRepository: 'http://gitea-http:3000/genie/afterloan.git',
             sortMode: 'DESCENDING_SMART'
         )
         choice(
@@ -33,17 +33,17 @@ pipeline {
         SONAR_PROJECT_NAME = 'afterloan'
 
         // ── Git 소스 ─────────────────────────────────────────────────
-        GIT_URL                        = 'http://gitea-http:3000/admin/msaproject.git'
+        GIT_URL                        = 'http://gitea-http:3000/genie/afterloan.git'
         GIT_CREDENTIALS_ID             = 'gitea-credentials'
         GIT_BRANCH                     = 'main'
 
         // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL                     = 'http://gitea-http:3000/genie/afterloan.git'
-        GITOPS_PATH                    = 'gitea-http:3000/admin/msaproject-gitops.git'
-        GITOPS_API_URL                 = 'http://gitea-http:3000/api/v1/repos/admin/kustomize'
+        GITOPS_PATH                    = 'gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_API_URL                 = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize.git'
         GITOPS_CREDENTIALS_ID          = 'gitea-credentials'
         GITOPS_BRANCH                  = 'main'
-        GITOPS_DIR                     = 'backend/backend-svc/overlay/dev'
+        GITOPS_DIR                     = 'afterloan/overlay/dev'
         GITOPS_CONTAINER_NAME          = 'backend'
 
         // ── Harbor 이미지 ─────────────────────────────────────────────
