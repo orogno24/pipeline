@@ -5,9 +5,9 @@ pipeline {
         }
     }
 
-    //triggers {
-    //    cron('H/5 * * * *')
-    //}
+    #triggers {
+    #    cron('H/5 * * * *')
+    #}
 
     stages {
         stage('승인 이슈 조회 및 Merge') {
@@ -30,6 +30,7 @@ pipeline {
                         }
 
                         env.HAS_APPROVED = 'true'
+                        env.CURRENT_REPO = ''
 
                         issues.issues.each { issue ->
                             def desc = issue.description ?: ''
@@ -54,6 +55,7 @@ pipeline {
 
                             if (mergeResponse.status == 200) {
                                 echo "Merge 완료 - ${repoName} PR #${prNumber}"
+                                env.CURRENT_REPO = repoName
                             } else {
                                 echo "Merge 실패 또는 이미 처리됨 - ${repoName} PR #${prNumber} (${mergeResponse.status})"
                             }
@@ -74,11 +76,11 @@ pipeline {
 
         stage('소스 체크아웃') {
             when {
-                expression { env.HAS_APPROVED == 'true' }
+                expression { env.HAS_APPROVED == 'true' && env.CURRENT_REPO != '' }
             }
             steps {
                 git(
-                    url: 'http://gitea-http.cicd.svc.cluster.local:3000/admin/msaproject.git',
+                    url: "http://gitea-http.cicd.svc.cluster.local:3000/admin/${env.CURRENT_REPO}.git",
                     branch: 'main',
                     credentialsId: 'gitea-credentials'
                 )
@@ -87,12 +89,12 @@ pipeline {
 
         stage('Transfer Source Archive To FTC') {
             when {
-                expression { env.HAS_APPROVED == 'true' }
+                expression { env.HAS_APPROVED == 'true' && env.CURRENT_REPO != '' }
             }
             steps {
                 sh '''
                     set -e
-                    APP_NAME="msaproject"
+                    APP_NAME="${CURRENT_REPO}"
                     COMMIT_SHA="$(git rev-parse --short HEAD)"
                     BUILD_DATE="$(date +%Y%m%d%H%M%S)"
                     ARCHIVE_NAME="${APP_NAME}-main-${BUILD_NUMBER}-${BUILD_DATE}-${COMMIT_SHA}.tar.gz"
