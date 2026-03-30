@@ -1,19 +1,17 @@
 pipeline {
-    parameters {
-        gitParameter(
-            name: 'SELECTED_TAG',
-            description: '배포할 Git 태그를 선택하세요',
-            type: 'PT_TAG',
-            branch: 'main',
-            branchFilter: 'origin/(.*)',
-            defaultValue: 'latest',
-            useRepository: 'http://gitea-http:3000/genie/afterloan.git',
-            sortMode: 'DESCENDING_SMART'
-        )
-        choice(
-            name: 'BUILD_TOOL',
-            choices: ['gradle', 'maven'],
-            description: '빌드 도구를 선택하세요 (gradle 또는 maven)'
+   triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'PR_ACTION',   value: '$.action'],
+                [key: 'PR_TO',       value: '$.pull_request.base.label'],
+                [key: 'PR_HEAD_SHA', value: '$.pull_request.head.sha'],
+                [key: 'REPO_NAME',   value: '$.repository.name'],
+                [key: 'PR_NUMBER',   value: '$.number']
+            ],
+            causeString: 'subbranch→dev PR #$PR_NUMBER',
+            token: 'build-deploy-token',
+            regexpFilterText: '$PR_ACTION__$PR_TO',
+            regexpFilterExpression: 'opened__dev'
         )
     }
 
@@ -28,12 +26,14 @@ pipeline {
     }
 
     environment {
+        BUILD_TOOL                     = 'gradle'
+
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
-        SONAR_PROJECT_KEY = 'afterloan'
-        SONAR_PROJECT_NAME = 'afterloan'
+        SONAR_PROJECT_KEY = 'afterloan-fe'
+        SONAR_PROJECT_NAME = 'afterloan-fe'
 
         // ── Git 소스 ─────────────────────────────────────────────────
-        GIT_URL                        = 'http://gitea-http:3000/genie/afterloan.git'
+        GIT_URL                        = 'http://gitea-http:3000/afterloan/afterloan-fe.git'
         GIT_CREDENTIALS_ID             = 'gitea-credentials'
         GIT_BRANCH                     = 'main'
 
@@ -43,20 +43,20 @@ pipeline {
         GITOPS_API_URL                 = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize.git'
         GITOPS_CREDENTIALS_ID          = 'gitea-credentials'
         GITOPS_BRANCH                  = 'main'
-        GITOPS_DIR                     = 'afterloan/overlay/dev'
-        GITOPS_CONTAINER_NAME          = 'afterloan'
+        GITOPS_DIR                     = 'afterloan-fe/overlay/dev'
+        GITOPS_CONTAINER_NAME          = 'afterloan-fe'
 
         // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL            = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS        = 'harbor.dev.jtcsb.co.kr'
         DOCKER_PROJECT_NAME            = 'msaproject'
-        DOCKER_IMAGE_NAME              = 'msaproject/afterloan'
-        DOCKER_REPO_NAME               = 'afterloan'
-        DOCKER_IMAGE_URL               = 'harbor.dev.jtcsb.co.kr/msaproject/afterloan'
+        DOCKER_IMAGE_NAME              = 'msaproject/afterloan-fe'
+        DOCKER_REPO_NAME               = 'afterloan-fe'
+        DOCKER_IMAGE_URL               = 'harbor.dev.jtcsb.co.kr/msaproject/afterloan-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-credentials'
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
-        BUILD_CONTEXT                  = 'afterloan'
+        BUILD_CONTEXT                  = 'afterloan-fe'
     }
 
     stages {
@@ -64,19 +64,23 @@ pipeline {
             steps {
                 script {
                     def core = load 'common/core.groovy'
+                    core.checkTag(env.REPO_NAME, env.PR_HEAD_SHA)
+                    core.mergePR(env.REPO_NAME, env.PR_NUMBER)
                     core.checkout()
-
+                    core.notifyRedmine("START")
                     dir(env.BUILD_CONTEXT) {
-                        core.build()
-                        core.sonarAnalysis()
-                        core.sonarAnalysisResult()
                         core.dockerBuild()
                     }
                     core.dockerPush()
-//                     core.harborImageScan()
+                    core.harborImageScan()
                     core.gitOpsDeploy()
+                    core.notifyRedmine("SUCCESS")
                 }
             }
         }
+    }
+    post {
+        success { echo "파이프라인 완료" }
+        failure { echo "파이프라인 실패" }
     }
 }
