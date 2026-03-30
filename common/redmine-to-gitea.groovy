@@ -5,9 +5,9 @@ pipeline {
         }
     }
 
-    #triggers {
-    #    cron('H/5 * * * *')
-    #}
+    //triggers {
+    //    cron('H/5 * * * *')
+    //}
 
     stages {
         stage('승인 이슈 조회 및 Merge') {
