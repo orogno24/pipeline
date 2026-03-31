@@ -33,7 +33,7 @@ def notifyRedmine(String status = "START") {
             returnStdout: true
         ).trim()
 
-        def version = env.SELECTED_TAG ?: 'latest'
+        def version = env.APP_VERSION ?: 'latest'
 
         def subject = "[Jenkins] ${env.JOB_NAME} - ${status} - ${version}"
         def description = """\
