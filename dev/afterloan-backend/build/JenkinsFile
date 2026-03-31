@@ -53,7 +53,7 @@ pipeline {
         stage('Load and Run') {
             steps {
                 script {
-                    def core = load 'common/core-webhook.groovy'
+                    def core = load 'common/core.groovy'
                     core.checkout()
                     core.notifyRedmine("START")
                     core.notifyRedmine("SUCCESS")
