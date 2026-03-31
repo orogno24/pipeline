@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        BUILD_TOOL = 'gradle'
+        BUILD_TOOL = '.'
 
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'afterloan-fe'
@@ -53,6 +53,12 @@ pipeline {
                 script {
                     def core = load 'common/core-webhook.groovy'
                     core.checkout()
+                    core.notifyRedmine("START")
+                    core.dockerBuild()
+                    core.dockerPush()
+                    core.harborImageScan()
+                    core.gitOpsDeploy()
+                    core.notifyRedmine("SUCCESS")
                 }
             }
         }
