@@ -596,7 +596,7 @@ EOF
     }
 }
 
-def transferSourceArchiveToFtc(String sourceDir = 'source') {
+def transferSourceArchiveToFtc(String sourceDir = 'source', String appName = 'app', String branchName = 'main') {
     stage('Transfer Source Archive To FTC') {
         try {
             echo("===============[Transfer Source Archive To FTC] 단계 시작===============")
@@ -604,10 +604,11 @@ def transferSourceArchiveToFtc(String sourceDir = 'source') {
             sh """
                 set -e
 
-                APP_NAME="msaproject"
+                APP_NAME="${appName}"
+                BRANCH_NAME="${branchName}"
                 COMMIT_SHA=\$(git -C "${sourceDir}" rev-parse --short HEAD)
                 BUILD_DATE=\$(date +%Y%m%d%H%M%S)
-                ARCHIVE_NAME="\${APP_NAME}-${env.GIT_BRANCH}-${BUILD_NUMBER}-\${BUILD_DATE}-\${COMMIT_SHA}.tar.gz"
+                ARCHIVE_NAME="\${APP_NAME}-\${BRANCH_NAME}-${BUILD_NUMBER}-\${BUILD_DATE}-\${COMMIT_SHA}.tar.gz"
 
                 echo "=== debug start ==="
                 id
