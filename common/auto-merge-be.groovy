@@ -19,7 +19,7 @@ pipeline {
                 [key: 'TRACKER_NAME',      value: '$.issue.tracker.name']
             ],
             causeString: 'Redmine 이슈 #$ISSUE_ID 웹훅 수신',
-            token: 'redmine-approve-token',
+            token: 'redmine-approve-token-be',
             printContributedVariables: true,
             printPostContent: true
         )
