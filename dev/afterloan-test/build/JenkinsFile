@@ -43,7 +43,7 @@ pipeline {
         stage('Load and Run') {
             steps {
                 script {
-                    def core = load 'common/core.groovy'
+                    def core = load 'common/core-webhook.groovy'
                     core.checkTag(env.REPO_NAME, env.PR_HEAD_SHA)
                     core.mergePR(env.REPO_NAME, env.PR_NUMBER)
                     core.checkout()
