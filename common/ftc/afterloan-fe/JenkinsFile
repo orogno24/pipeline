@@ -34,7 +34,7 @@ pipeline {
         stage('Load and Run') {
             steps {
                 script {
-                    def core = load 'common/core-webhook.groovy'
+                    def core = load 'common/core.groovy'
                     core.transferSourceArchiveToFtc('source', env.APP_NAME, env.GIT_BRANCH_NAME)
                 }
             }
