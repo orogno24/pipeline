@@ -1,28 +1,8 @@
 pipeline {
-   triggers {
-        GenericTrigger(
-            genericVariables: [
-                [key: 'PR_ACTION',   value: '$.action'],
-                [key: 'PR_TO',       value: '$.pull_request.base.label'],
-                [key: 'PR_HEAD_SHA', value: '$.pull_request.head.sha'],
-                [key: 'REPO_NAME',   value: '$.repository.name'],
-                [key: 'PR_NUMBER',   value: '$.number']
-            ],
-            causeString: 'subbranch→dev PR #$PR_NUMBER',
-            token: 'build-deploy-token',
-            regexpFilterText: '$PR_ACTION__$PR_TO',
-            regexpFilterExpression: 'opened__dev'
-        )
-    }
-
     agent {
         kubernetes {
             label 'dind'
         }
-    }
-
-    tools {
-        jdk 'jdk-17'
     }
 
     environment {
@@ -49,14 +29,14 @@ pipeline {
         // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL            = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS        = 'harbor.dev.jtcsb.co.kr'
-        DOCKER_PROJECT_NAME            = 'msaproject'
-        DOCKER_IMAGE_NAME              = 'msaproject/afterloan-fe'
+        DOCKER_PROJECT_NAME            = 'jtcsb'
+        DOCKER_IMAGE_NAME              = 'jtcsb/afterloan-fe'
         DOCKER_REPO_NAME               = 'afterloan-fe'
-        DOCKER_IMAGE_URL               = 'harbor.dev.jtcsb.co.kr/msaproject/afterloan-fe'
+        DOCKER_IMAGE_URL               = 'harbor.dev.jtcsb.co.kr/jtcsb/afterloan-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-credentials'
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
-        BUILD_CONTEXT                  = 'afterloan-fe'
+        BUILD_CONTEXT                  = '.'
     }
 
     stages {
@@ -68,9 +48,7 @@ pipeline {
                     core.mergePR(env.REPO_NAME, env.PR_NUMBER)
                     core.checkout()
                     core.notifyRedmine("START")
-                    dir(env.BUILD_CONTEXT) {
-                        core.dockerBuild()
-                    }
+                    core.dockerBuild()
                     core.dockerPush()
                     core.harborImageScan()
                     core.gitOpsDeploy()
