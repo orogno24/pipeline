@@ -53,12 +53,6 @@ pipeline {
                 script {
                     def core = load 'common/core-webhook.groovy'
                     core.checkout()
-                    core.build()
-                    core.sonarAnalysis()
-                    core.sonarAnalysisResult()
-                    core.dockerBuild()
-                    core.dockerPush()
-                    core.gitOpsDeploy()
                 }
             }
         }
