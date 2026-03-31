@@ -29,7 +29,7 @@ pipeline {
         GITEA_API_BASE   = 'http://gitea-http.cicd.svc.cluster.local:3000/api/v1'
         GITEA_GIT_BASE   = 'http://gitea-http.cicd.svc.cluster.local:3000'
         REDMINE_API_BASE = 'http://redmine.cicd.svc.cluster.local'
-        GITEA_OWNER      = 'admin'
+        GITEA_OWNER      = 'afterloan'
 
         APPROVED_STATUS_ID     = '7'
         MERGE_REQUEST_TRACKER  = '4'
