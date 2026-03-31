@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        BUILD_TOOL = '.'
+        BUILD_TOOL = 'gradle'
 
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'afterloan-fe'
