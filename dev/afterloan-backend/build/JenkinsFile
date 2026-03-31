@@ -1,12 +1,12 @@
 pipeline {
     agent {
         kubernetes {
-            label 'dind'
+            label 'dind-maven'
         }
     }
 
     environment {
-        BUILD_TOOL = 'gradle'
+        BUILD_TOOL = 'maven'
 
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'afterloan-be'
@@ -37,6 +37,7 @@ pipeline {
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
+
     }
 
     stages {
@@ -52,7 +53,23 @@ pipeline {
             steps {
                 script {
                     def core = load 'common/core-webhook.groovy'
+
                     core.checkout()
+
+                    container('maven') {
+                        sh 'java -version'
+                        sh 'mvn -v'
+                        core.build()
+                        core.sonarAnalysis()
+                        core.sonarAnalysisResult()
+                    }
+
+                    container('docker-dind') {
+                        core.dockerBuild()
+                        core.dockerPush()
+                    }
+
+                    core.gitOpsDeploy()
                 }
             }
         }
