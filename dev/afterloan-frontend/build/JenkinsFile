@@ -7,7 +7,8 @@ pipeline {
 
     environment {
         BUILD_TOOL = 'gradle'
-
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+        
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'afterloan-fe'
         SONAR_PROJECT_NAME = 'afterloan-fe'
