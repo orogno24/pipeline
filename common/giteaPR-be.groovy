@@ -36,7 +36,7 @@ pipeline {
                             requestBody: """
                             {
                                 "issue": {
-                                    "project_id": "${REPO_NAME}",
+                                    "project_id": "jt-genie-lam",
                                     "subject": "[Merge 승인 요청] ${REPO_NAME} PR #${PR_NUMBER} - ${PR_TITLE}",
                                     "description": "저장소: ${REPO_FULL}\\nBranch: ${PR_FROM} → ${PR_TO}\\nPR 번호: ${PR_NUMBER}\\nPR URL: ${GITEA_PR_URL}\\n\\n승인 시 상태를 승인으로 변경해주세요.",
                                     "status_id": 1,
