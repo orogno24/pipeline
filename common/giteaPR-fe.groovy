@@ -7,7 +7,6 @@ pipeline {
                 [key: 'PR_ACTION',    value: '$.action'],
                 [key: 'PR_NUMBER',    value: '$.number'],
                 [key: 'PR_TITLE',     value: '$.pull_request.title'],
-                [key: 'PR_BODY',      value: '$.pull_request.body'],
                 [key: 'PR_FROM',      value: '$.pull_request.head.label'],
                 [key: 'PR_TO',        value: '$.pull_request.base.label'],
                 [key: 'REPO_NAME',    value: '$.repository.name'],
@@ -26,9 +25,6 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-
-                        def prBody = PR_BODY ?: 'PR 설명이 없습니다.'
-
                         def response = httpRequest(
                             httpMode: 'POST',
                             url: "http://redmine.cicd.svc.cluster.local/issues.json",
@@ -42,7 +38,7 @@ pipeline {
                                 "issue": {
                                     "project_id": "jt-genie-lam",
                                     "subject": "[Merge 승인 요청] ${REPO_NAME} PR #${PR_NUMBER} - ${PR_TITLE}",
-                                    "description": "저장소: ${REPO_FULL}\\nBranch: ${PR_FROM} → ${PR_TO}\\nPR 번호: ${PR_NUMBER}\\nPR URL: ${GITEA_PR_URL}\\n\\nPR 설명:\\n${prBody}\\n\\n변경 사항은 위 PR 링크에서 확인할 수 있습니다.\\n\\n승인 시 상태를 승인으로 변경해주세요.",
+                                    "description": "저장소: ${REPO_FULL}\\nBranch: ${PR_FROM} → ${PR_TO}\\nPR 번호: ${PR_NUMBER}\\nPR URL: ${GITEA_PR_URL}\\n\\n변경 사항은 위 PR 링크에서 확인할 수 있습니다.\\n\\n승인 시 상태를 승인으로 변경해주세요.",
                                     "status_id": 1,
                                     "priority_id": 2,
                                     "tracker_id": 4,
@@ -54,8 +50,7 @@ pipeline {
                             }
                             """
                         )
-
-                        echo "응답: ${response.content}"
+                        echo "응답: ${response.content}" 
                         echo "Redmine 이슈 생성 완료 - 프로젝트: ${REPO_NAME}, PR: #${PR_NUMBER}"
                     }
                 }
@@ -64,11 +59,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo "승인 요청 완료 - ${REPO_NAME} PR #${PR_NUMBER}"
-        }
-        failure {
-            echo "Redmine 이슈 생성 실패"
-        }
+        success { echo "승인 요청 완료 - ${REPO_NAME} PR #${PR_NUMBER}" }
+        failure { echo "Redmine 이슈 생성 실패" }
     }
 }
