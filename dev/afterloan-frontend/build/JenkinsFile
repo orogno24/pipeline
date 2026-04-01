@@ -29,11 +29,11 @@ pipeline {
 
         // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL = 'harbor-core:80'
-        DOCKER_REGISTRY_URL_OPS = 'harbor.dev.jtcsb.co.kr'
+        DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
         DOCKER_IMAGE_NAME = 'jtcsb/afterloan-fe'
         DOCKER_REPO_NAME = 'afterloan-fe'
-        DOCKER_IMAGE_URL = 'harbor.dev.jtcsb.co.kr/jtcsb/afterloan-fe'
+        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/afterloan-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-credentials'
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
