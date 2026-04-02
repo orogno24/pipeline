@@ -14,7 +14,7 @@ pipeline {
                 [key: 'GITEA_PR_URL', value: '$.pull_request.url']
             ],
             causeString: 'PR #$PR_NUMBER 생성됨',
-            token: 'merge-approve-token-dev-fe',
+            token: 'fesubdevtoken',
             regexpFilterText: '$PR_ACTION__$PR_TO',
             regexpFilterExpression: 'opened__dev'
         )
