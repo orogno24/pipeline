@@ -16,7 +16,7 @@ pipeline {
             causeString: 'PR #$PR_NUMBER 생성됨',
             token: 'merge-approve-token-dev-fe',
             regexpFilterText: '$PR_ACTION__$PR_TO',
-            regexpFilterExpression: 'opened__main'
+            regexpFilterExpression: 'opened__dev'
         )
     }
 
