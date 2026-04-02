@@ -42,6 +42,7 @@ pipeline {
                                     "status_id": 1,
                                     "priority_id": 2,
                                     "tracker_id": 4,
+                                    "is_private": true,
                                     "custom_fields": [
                                         {"id": 1, "value": "${PR_NUMBER}"},
                                         {"id": 2, "value": "${REPO_NAME}"}
