@@ -59,7 +59,6 @@ pipeline {
                         core.dockerBuild()
                     }
                     core.dockerPush()
-                    core.harborImageScan()
                     core.gitOpsDeploy()
                     core.notifyRedmine("SUCCESS")
                 }
