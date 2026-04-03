@@ -1,7 +1,7 @@
 pipeline {
     agent {
         kubernetes {
-            label 'dind'
+            label 'dind-gradle'
         }
     }
 
@@ -52,16 +52,30 @@ pipeline {
         stage('Load and Run') {
             steps {
                 script {
+                    // 공통 라이브러리 로드 및 체크아웃
                     def core = load 'common/core.groovy'
                     core.checkout()
-                    core.notifyRedmine("START")
-                    dir(env.BUILD_CONTEXT) {
-                        core.dockerBuild()
+
+                    // 1. 빌드 및 품질 분석 (Gradle 환경)
+                    container('gradle') {
+                        dir(env.BUILD_CONTEXT) {
+                            core.build()
+                            core.sonarAnalysis()
+                            core.sonarAnalysisResult()
+                        }
                     }
-                    core.dockerPush()
+
+                    // 2. 도커 이미지 빌드 및 푸시 (Docker-in-Docker 환경)
+                    container('docker-dind') {
+                        dir(env.BUILD_CONTEXT) {
+                            core.dockerBuild()
+                        }
+                        core.dockerPush()
+                    }
+                    
                     core.harborImageScan()
+                    // 3. GitOps 배포 설정 업데이트
                     core.gitOpsDeploy()
-                    core.notifyRedmine("SUCCESS")
                 }
             }
         }
