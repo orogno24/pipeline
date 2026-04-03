@@ -1,0 +1,69 @@
+pipeline {
+    agent {
+        kubernetes {
+            label 'dind'
+        }
+    }
+
+    environment {
+        BUILD_TOOL = 'gradle'
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+        
+        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
+        SONAR_PROJECT_KEY = 'genie-us-be'
+        SONAR_PROJECT_NAME = 'genie-us-be'
+
+        // ── Git 소스 ─────────────────────────────────────────────────
+        GIT_URL = 'http://gitea-http:3000/afterloan/genie-us-be.git'
+        GIT_CREDENTIALS_ID = 'gitea-credentials'
+        GIT_BRANCH = 'dev'
+
+        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
+        GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize.git'
+        GITOPS_CREDENTIALS_ID = 'gitea-credentials'
+        GITOPS_BRANCH = 'main'
+        GITOPS_DIR = 'genie-us-be/overlay/dev'
+        GITOPS_CONTAINER_NAME = 'genie-us-be'
+
+        // ── Harbor 이미지 ─────────────────────────────────────────────
+        DOCKER_REGISTRY_URL = 'harbor-core:80'
+        DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
+        DOCKER_PROJECT_NAME = 'jtcsb'
+        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-be'
+        DOCKER_REPO_NAME = 'genie-us-be'
+        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-be'
+        DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
+
+        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
+        BUILD_CONTEXT = '.'
+    }
+
+    stages {
+        stage('Webhook Info') {
+            steps {
+                echo "Webhook received"
+                echo "ref = ${env.ref}"
+                echo "after = ${env.after}"
+            }
+        }
+
+        stage('Load and Run') {
+            steps {
+                script {
+                    def core = load 'common/core.groovy'
+                    core.checkout()
+                    core.notifyRedmine("START")
+                    dir(env.BUILD_CONTEXT) {
+                        core.dockerBuild()
+                    }
+                    core.dockerPush()
+                    core.harborImageScan()
+                    core.gitOpsDeploy()
+                    core.notifyRedmine("SUCCESS")
+                }
+            }
+        }
+    }
+}
