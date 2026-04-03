@@ -34,7 +34,7 @@ pipeline {
         DOCKER_IMAGE_NAME = 'jtcsb/genie-us-fe'
         DOCKER_REPO_NAME = 'genie-us-fe'
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
-        DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-credentials'
+        DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
