@@ -74,7 +74,6 @@ pipeline {
                         core.dockerPush()
                     }
                     
-                    core.harborImageScan()
                     // 3. GitOps 배포 설정 업데이트
                     core.gitOpsDeploy()
                     core.notifyRedmine("SUCCESS")
