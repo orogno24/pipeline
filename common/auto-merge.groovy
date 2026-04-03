@@ -1,103 +1,10 @@
-pipeline {
-    agent {
-        kubernetes {
-            label 'dind-ftc'
-        }
-    }
-
-    triggers {
-        GenericTrigger(
-            genericVariables: [
-                [key: 'ISSUE_ID',          value: '$.issue.id'],
-                [key: 'ISSUE_STATUS_ID',   value: '$.issue.status.id'],
-                [key: 'ISSUE_STATUS_NAME', value: '$.issue.status.name'],
-                [key: 'ISSUE_SUBJECT',     value: '$.issue.subject'],
-                [key: 'ISSUE_DESC',        value: '$.issue.description'],
-                [key: 'PROJECT_ID',        value: '$.issue.project.id'],
-                [key: 'PROJECT_NAME',      value: '$.issue.project.name'],
-                [key: 'TRACKER_ID',        value: '$.issue.tracker.id'],
-                [key: 'TRACKER_NAME',      value: '$.issue.tracker.name']
-            ],
-            causeString: 'Redmine 이슈 #$ISSUE_ID 웹훅 수신',
-            token: 'redmine-approve-token',
-            printContributedVariables: true,
-            printPostContent: true
-        )
-    }
-
-    environment {
-        GITEA_API_BASE   = 'http://gitea-http.cicd.svc.cluster.local:3000/api/v1'
-        GITEA_GIT_BASE   = 'http://gitea-http.cicd.svc.cluster.local:3000'
-        REDMINE_API_BASE = 'http://redmine.cicd.svc.cluster.local'
-        GITEA_OWNER      = 'afterloan'
-
-        APPROVED_STATUS_ID     = '7'
-        MERGE_REQUEST_TRACKER  = '4'
-        MERGED_STATUS_ID       = '10'
-        MERGE_FAIL_STATUS_ID   = '11'
-    }
-
-    stages {
-
-        stage('웹훅 수신 내용 출력') {
-            steps {
-                script {
-                    echo '========== WEBHOOK DEBUG =========='
-                    echo "ISSUE_ID          = ${env.ISSUE_ID}"
-                    echo "ISSUE_STATUS_ID   = ${env.ISSUE_STATUS_ID}"
-                    echo "TRACKER_ID        = ${env.TRACKER_ID}"
-                    echo "PROJECT_NAME      = ${env.PROJECT_NAME}"
-                    echo "ISSUE_DESC        = ${env.ISSUE_DESC}"
-                    echo '=================================='
-                }
-            }
-        }
-
-        stage('웹훅 데이터 검증') {
-            steps {
-                script {
-                    if (!env.ISSUE_ID?.trim()) {
-                        error("ISSUE_ID 없음")
-                    }
-
-                    if (env.ISSUE_STATUS_ID != env.APPROVED_STATUS_ID) {
-                        echo "승인 상태 아님 → 종료"
-                        currentBuild.result = 'NOT_BUILT'
-                        return
-                    }
-
-                    if (env.TRACKER_ID != env.MERGE_REQUEST_TRACKER) {
-                        echo "트래커 대상 아님 → 종료"
-                        currentBuild.result = 'NOT_BUILT'
-                        return
-                    }
-
-                    def desc = env.ISSUE_DESC ?: ''
-
-                    env.PR_NUMBER = extractPrNumber(desc)
-                    env.REPO_NAME = extractRepoName(desc)
-
-                    if (!env.PR_NUMBER) {
-                        error("PR 번호 파싱 실패")
-                    }
-
-                    if (!env.REPO_NAME) {
-                        error("레포명 파싱 실패")
-                    }
-
-                    env.PROCEED_PIPELINE = 'true'
-
-                    echo "파싱 결과 → REPO=${env.REPO_NAME}, PR=${env.PR_NUMBER}"
-                }
-            }
-        }
-
-        stage('Gitea PR Merge') {
+stage('Gitea PR Merge') {
             when {
                 expression { env.PROCEED_PIPELINE == 'true' }
             }
             steps {
                 script {
+                    // httpRequest 실행
                     def response = httpRequest(
                         httpMode: 'POST',
                         url: "${env.GITEA_API_BASE}/repos/${env.GITEA_OWNER}/${env.REPO_NAME}/pulls/${env.PR_NUMBER}/merge",
@@ -109,15 +16,21 @@ pipeline {
                           "merge_message_field": "Auto merged by Jenkins (#${env.ISSUE_ID})"
                         }
                         """,
-                        validResponseCodes: '200:409'
+                        validResponseCodes: '200:409' // 409를 허용하여 스크립트가 중단되지 않게 함
                     )
 
-                    echo "Merge 응답: ${response.status}"
+                    echo "Gitea Merge 응답 코드: ${response.status}"
 
                     if (response.status == 200) {
                         env.MERGE_RESULT = 'SUCCESS'
+                        env.MERGE_NOTES = "✅ 자동 머지가 완료되었습니다."
+                    } else if (response.status == 409) {
+                        env.MERGE_RESULT = 'CONFLICT' // 409 전용 결과값 설정
+                        env.MERGE_NOTES = "❌ 머지 실패: 코드 충돌(Conflict)이 발생했거나 Gitea 정책에 의해 머지할 수 없는 상태입니다. PR 페이지를 확인하세요."
+                        echo "[WARNING] 409 Conflict 발생"
                     } else {
                         env.MERGE_RESULT = 'FAIL'
+                        env.MERGE_NOTES = "🚫 머지 실패: 알 수 없는 에러가 발생했습니다. (Status: ${response.status})"
                     }
                 }
             }
@@ -130,8 +43,15 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
-
-                        def status = env.MERGE_RESULT == 'SUCCESS' ? env.MERGED_STATUS_ID : env.MERGE_FAIL_STATUS_ID
+                        
+                        // 결과에 따른 Redmine 상태 ID 결정
+                        def targetStatusId = ""
+                        if (env.MERGE_RESULT == 'SUCCESS') {
+                            targetStatusId = env.MERGED_STATUS_ID
+                        } else {
+                            // 409를 포함한 모든 실패 케이스는 FAIL 상태로 처리
+                            targetStatusId = env.MERGE_FAIL_STATUS_ID
+                        }
 
                         httpRequest(
                             httpMode: 'PUT',
@@ -141,35 +61,18 @@ pipeline {
                             requestBody: """
                             {
                               "issue": {
-                                "status_id": ${status},
-                                "notes": "Jenkins merge 결과: ${env.MERGE_RESULT}"
+                                "status_id": ${targetStatusId},
+                                "notes": "${env.MERGE_NOTES}"
                               }
                             }
                             """
                         )
+                        
+                        // 만약 머지가 실패했다면 Jenkins 빌드 결과도 실패로 표시하고 싶을 때 (선택 사항)
+                        if (env.MERGE_RESULT != 'SUCCESS') {
+                            currentBuild.result = 'FAILURE'
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-@NonCPS
-def extractRepoName(String desc) {
-    def line = desc.readLines().find { it.startsWith('저장소:') }
-    if (!line) return ''
-
-    def value = line.replaceFirst(/^저장소:\s*/, '').trim()
-    def parts = value.tokenize('/')
-
-    return parts ? parts[-1].trim() : ''
-}
-
-@NonCPS
-def extractPrNumber(String desc) {
-    def line = desc.readLines().find { it.startsWith('PR 번호:') }
-    if (!line) return ''
-
-    def value = line.replaceFirst(/^PR 번호:\s*/, '').trim()
-    return value.isInteger() ? value : ''
-}
