@@ -21,7 +21,7 @@ pipeline {
         // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
         GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
-        GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize.git'
+        GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
         GITOPS_CREDENTIALS_ID = 'gitea-credentials'
         GITOPS_BRANCH = 'main'
         GITOPS_DIR = 'genie-us-be/overlay/dev'
