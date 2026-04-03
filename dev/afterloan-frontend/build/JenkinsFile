@@ -55,6 +55,12 @@ pipeline {
                     def core = load 'common/core.groovy'
                     core.checkout()
                     core.notifyRedmine("START")
+                    dir(env.BUILD_CONTEXT) {
+                        core.dockerBuild()
+                    }
+                    core.dockerPush()
+                    core.harborImageScan()
+                    core.gitOpsDeploy()
                     core.notifyRedmine("SUCCESS")
                 }
             }
