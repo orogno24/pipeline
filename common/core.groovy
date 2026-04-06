@@ -43,6 +43,10 @@ def notifyRedmine(String status = "START", String extraMessage = "") {
         }
 
         def version = env.APP_VERSION ?: 'latest'
+
+        def buildUrl = (env.BUILD_URL ?: 'N/A')
+            .replace('http://jenkins:8080/', 'https://jenkins.jtchinae-bank.co.kr/')
+            
         def subject = "[Jenkins] ${env.JOB_NAME} - ${status} - ${version}"
 
         def description = """\
