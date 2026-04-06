@@ -39,16 +39,15 @@ def notifyRedmine(String status = "START", String extraMessage = "") {
                 returnStdout: true
             ).trim()
         } catch (ignored) {
-            echo("git rev-parse HEAD 실행 전이거나 워크스페이스 상태상 커밋 SHA 조회 불가")
+            echo("commit SHA 조회 불가")
         }
 
         def version = env.APP_VERSION ?: 'latest'
+        def subject = "[Jenkins] ${env.JOB_NAME} - ${status} - ${version}"
 
-        def subject = "[Jenkins][${env.JOB_NAME}] ${status} (${version})"
         def description = """\
 배포 상태: ${status}
 
-JOB 이름: ${env.JOB_NAME}
 브랜치: ${env.GIT_BRANCH}
 태그: ${version}
 커밋: ${commitSha}
@@ -59,7 +58,7 @@ ${extraMessage ? "추가 메시지: ${extraMessage}" : ""}
 
         def payload = JsonOutput.toJson([
             issue: [
-                project_id : "msaproject",
+                project_id : "jt-genie-lam",
                 subject    : subject,
                 description: description
             ]
@@ -262,16 +261,21 @@ def sonarAnalysis() {
 def gradleSonarAnalysis() {
     stage('Gradle Sonar Analysis') {
         script {
-            withSonarQubeEnv('sonarqube') {
-                sh 'chmod +x ./gradlew'
-                sh """
-                    ./gradlew sonar --no-daemon \
-                        -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \
-                        -Dsonar.projectName='${env.SONAR_PROJECT_NAME}' \
-                        -Dsonar.host.url=${env.SONAR_HOST_URL} \
-                        -Dsonar.token=${SONAR_AUTH_TOKEN} \
-                        -Dsonar.java.binaries=./build/classes/java/main
-                """
+            try {
+                withSonarQubeEnv('sonarqube') {
+                    sh 'chmod +x ./gradlew'
+                    sh """
+                        ./gradlew sonar --no-daemon \
+                            -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \
+                            -Dsonar.projectName='${env.SONAR_PROJECT_NAME}' \
+                            -Dsonar.host.url=${env.SONAR_HOST_URL} \
+                            -Dsonar.token=${SONAR_AUTH_TOKEN} \
+                            -Dsonar.java.binaries=./build/classes/java/main
+                    """
+                }
+            } catch (err) {
+                echo("[Gradle Sonar Analysis] 실패: ${err}")
+                throw err
             }
         }
     }
@@ -280,21 +284,26 @@ def gradleSonarAnalysis() {
 def mavenSonarAnalysis() {
     stage('Maven Sonar Analysis') {
         script {
-            echo("===============[Maven Sonar Analysis] 단계 시작===============")
+            try {
+                echo("===============[Maven Sonar Analysis] 단계 시작===============")
 
-            withSonarQubeEnv('sonarqube') {
-                sh 'java -version'
-                sh 'mvn -v'
-                sh """
-                    mvn sonar:sonar \
-                        -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \
-                        -Dsonar.projectName='${env.SONAR_PROJECT_NAME}' \
-                        -Dsonar.host.url=${env.SONAR_HOST_URL} \
-                        -Dsonar.token=${SONAR_AUTH_TOKEN}
-                """
+                withSonarQubeEnv('sonarqube') {
+                    sh 'java -version'
+                    sh 'mvn -v'
+                    sh """
+                        mvn sonar:sonar \
+                            -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \
+                            -Dsonar.projectName='${env.SONAR_PROJECT_NAME}' \
+                            -Dsonar.host.url=${env.SONAR_HOST_URL} \
+                            -Dsonar.token=${SONAR_AUTH_TOKEN}
+                    """
+                }
+
+                echo("===============[Maven Sonar Analysis] 단계 종료===============")
+            } catch (err) {
+                echo("[Maven Sonar Analysis] 실패: ${err}")
+                throw err
             }
-
-            echo("===============[Maven Sonar Analysis] 단계 종료===============")
         }
     }
 }
@@ -323,7 +332,6 @@ def sonarAnalysisResult() {
                         try {
                             def qg = waitForQualityGate()
                             echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
-
                             if (qg.status != 'OK') {
                                 echo("소나큐브 품질 게이트 검사 실패: ${qg.status}")
                                 notifyRedmine("SONAR_GATE_FAIL", "품질 게이트 상태: ${qg.status}")
@@ -466,7 +474,6 @@ def harborImageScan() {
                     if (severity.toLowerCase() == 'critical') {
                         echo("Critical 취약점 발견")
                         notifyRedmine("HARBOR_SCAN_FAIL", "Critical 취약점 발견. CVE: ${cveList ?: '없음'}")
-                        // error("Critical 취약점 발견: 파이프라인 실패 처리")
                     } else {
                         echo("Critical 취약점 없음, latest 태그 push 실행")
                         container('docker-dind') {
