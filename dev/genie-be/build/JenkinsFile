@@ -55,6 +55,7 @@ pipeline {
                     // 공통 라이브러리 로드 및 체크아웃
                     def core = load 'common/core.groovy'
                     core.checkout()
+                    core.notifyRedmine("START")
 
                     // 1. 빌드 및 품질 분석 (Gradle 환경)
                     container('gradle') {
@@ -75,6 +76,7 @@ pipeline {
                     
                     // 3. GitOps 배포 설정 업데이트
                     core.gitOpsDeploy()
+                    core.notifyRedmine("SUCCESS")
                 }
             }
         }
