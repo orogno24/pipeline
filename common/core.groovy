@@ -1,5 +1,6 @@
 def checkout() {
     stage('Git Checkout') {
+        notifyRedmine("CHECKOUT_START")
         try {
             echo("===============[Git Checkout] 단계 시작===============")
 
@@ -29,8 +30,10 @@ def checkout() {
             sh("git checkout ${env.APP_VERSION}")
 
             echo("===============[Git Checkout] 단계 종료===============")
+            notifyRedmine("CHECKOUT_SUCCESS")
         } catch (err) {
             echo("[Git Checkout] 실패: ${err}")
+            notifyRedmine("CHECKOUT_FAIL")
             error("Git 체크아웃 단계에서 오류 발생")
         }
     }
@@ -77,6 +80,7 @@ EOF
 
 def build() {
     stage('Build') {
+        notifyRedmine("BUILD_START")
         try {
             echo("===============[Build] 단계 시작===============")
 
@@ -89,8 +93,10 @@ def build() {
             }
 
             echo("===============[Build] 단계 종료===============")
+            notifyRedmine("BUILD_SUCCESS")
         } catch (err) {
             echo("[Build] 실패: ${err}")
+            notifyRedmine("BUILD_FAIL")
             error("빌드 단계에서 오류 발생")
         }
     }
@@ -98,6 +104,7 @@ def build() {
 
 def test() {
     stage('Test') {
+        notifyRedmine("TEST_START")
         echo("===============[Test] 단계 시작===============")
 
         script {
@@ -109,8 +116,10 @@ def test() {
                 } else {
                     error("지원하지 않는 빌드 도구입니다.")
                 }
+                notifyRedmine("TEST_SUCCESS")
             } catch (err) {
                 echo("[Test] 실패: ${err}")
+                notifyRedmine("TEST_FAIL")
                 error("테스트 단계에서 오류 발생")
             }
         }
@@ -225,6 +234,7 @@ def mavenBuild() {
 
 def sonarAnalysis() {
     stage('Sonar Analysis') {
+        notifyRedmine("SONAR_ANALYSIS_START")
         script {
             try {
                 echo("===============[Sonar Analysis] 단계 시작===============")
@@ -238,8 +248,10 @@ def sonarAnalysis() {
                 }
 
                 echo("===============[Sonar Analysis] 단계 종료===============")
+                notifyRedmine("SONAR_ANALYSIS_SUCCESS")
             } catch (err) {
                 echo("[Sonar Analysis] 실패: ${err}")
+                notifyRedmine("SONAR_ANALYSIS_FAIL")
             }
         }
     }
@@ -310,6 +322,7 @@ def mavenSonarAnalysis() {
 
 def sonarAnalysisResult() {
     stage('Sonar Analysis Result') {
+        notifyRedmine("SONAR_GATE_START")
         script {
             try {
                 echo("===============[Sonar Analysis Result] 단계 시작===============")
@@ -317,6 +330,7 @@ def sonarAnalysisResult() {
                 def reportTaskExists = fileExists('build/sonar/report-task.txt')
                 if (!reportTaskExists) {
                     echo("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다. 품질 게이트 검사를 건너뜁니다.")
+                    notifyRedmine("SONAR_GATE_FAIL")
                     echo("===============[Sonar Analysis Result] 단계 종료===============")
                     return
                 }
@@ -328,15 +342,19 @@ def sonarAnalysisResult() {
                             echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
                             if (qg.status != 'OK') {
                                 echo("소나큐브 품질 게이트 검사 실패: ${qg.status}")
+                                notifyRedmine("SONAR_GATE_FAIL")
                                 echo("경고: 품질 게이트 검사에 실패했지만 파이프라인은 계속 진행됩니다.")
                             } else {
                                 echo("소나큐브 품질 게이트 검사 통과")
+                                notifyRedmine("SONAR_GATE_SUCCESS")
                             }
                         } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
                             echo("소나큐브 분석 결과 대기 중 타임아웃이 발생했습니다.")
+                            notifyRedmine("SONAR_GATE_FAIL")
                             echo("경고: 타임아웃이 발생했지만 파이프라인은 계속 진행됩니다.")
                         } catch (Exception e) {
                             echo("소나큐브 품질 게이트 검사 중 오류 발생: ${e.message}")
+                            notifyRedmine("SONAR_GATE_FAIL")
                             echo("경고: 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
                         }
                     }
@@ -345,6 +363,7 @@ def sonarAnalysisResult() {
                 echo("===============[Sonar Analysis Result] 단계 종료===============")
             } catch (err) {
                 echo("[Sonar Analysis Result] 실패: ${err}")
+                notifyRedmine("SONAR_GATE_FAIL")
                 echo("경고: Sonar Analysis Result 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
             }
         }
@@ -353,6 +372,7 @@ def sonarAnalysisResult() {
 
 def dockerBuild() {
     stage('Docker Build') {
+        notifyRedmine("DOCKER_BUILD_START")
         try {
             echo("===============[Docker Build] 단계 시작===============")
 
@@ -364,8 +384,10 @@ def dockerBuild() {
             }
 
             echo("===============[Docker Build] 단계 종료===============")
+            notifyRedmine("DOCKER_BUILD_SUCCESS")
         } catch (err) {
             echo("Docker Build 실패: ${err.getMessage()}")
+            notifyRedmine("DOCKER_BUILD_FAIL")
             error("Docker Build 단계에서 오류 발생")
         }
     }
@@ -373,100 +395,117 @@ def dockerBuild() {
 
 def dockerPush() {
     stage('Docker Push') {
+        notifyRedmine("DOCKER_PUSH_START")
         echo("===============[Docker Push] 단계 시작===============")
 
-        container('docker-dind') {
-            withCredentials([usernamePassword(
-                credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                usernameVariable: 'HARBOR_USER',
-                passwordVariable: 'HARBOR_PASS'
-            )]) {
-                sh '''
-                    set -e
-                    echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
-                    docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION"
-                '''
+        try {
+            container('docker-dind') {
+                withCredentials([usernamePassword(
+                    credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                    usernameVariable: 'HARBOR_USER',
+                    passwordVariable: 'HARBOR_PASS'
+                )]) {
+                    sh '''
+                        set -e
+                        echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
+                        docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION"
+                    '''
+                }
             }
-        }
 
-        echo("===============[Docker Push] 단계 종료===============")
+            echo("===============[Docker Push] 단계 종료===============")
+            notifyRedmine("DOCKER_PUSH_SUCCESS")
+        } catch (err) {
+            echo("[Docker Push] 실패: ${err}")
+            notifyRedmine("DOCKER_PUSH_FAIL")
+            error("Docker Push 단계에서 오류 발생")
+        }
     }
 }
 
 def harborImageScan() {
     stage('Harbor Image Scan') {
+        notifyRedmine("HARBOR_SCAN_START")
         echo("===============[Harbor Image Scan] 단계 시작===============")
 
         script {
-            withCredentials([usernamePassword(
-                credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                usernameVariable: 'HARBOR_USER',
-                passwordVariable: 'HARBOR_PASS'
-            )]) {
-                sh '''
-                    curl -v -k -X POST -u "$HARBOR_USER:$HARBOR_PASS" \
-                        "https://$DOCKER_REGISTRY_URL_OPS/api/v2.0/projects/$DOCKER_PROJECT_NAME/repositories/$DOCKER_REPO_NAME/artifacts/$APP_VERSION/scan"
-                '''
+            try {
+                withCredentials([usernamePassword(
+                    credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                    usernameVariable: 'HARBOR_USER',
+                    passwordVariable: 'HARBOR_PASS'
+                )]) {
+                    sh '''
+                        curl -v -k -X POST -u "$HARBOR_USER:$HARBOR_PASS" \
+                            "https://$DOCKER_REGISTRY_URL_OPS/api/v2.0/projects/$DOCKER_PROJECT_NAME/repositories/$DOCKER_REPO_NAME/artifacts/$APP_VERSION/scan"
+                    '''
 
-                def maxWait = 150
-                def interval = 10
-                def waited = 0
-                def vulnResult = '{}'
-                def found = false
+                    def maxWait = 150
+                    def interval = 10
+                    def waited = 0
+                    def vulnResult = '{}'
+                    def found = false
 
-                while (waited < maxWait) {
-                    vulnResult = sh(
-                        script: '''
-                            curl -sk -u "$HARBOR_USER:$HARBOR_PASS" \
-                            "https://$DOCKER_REGISTRY_URL_OPS/api/v2.0/projects/$DOCKER_PROJECT_NAME/repositories/$DOCKER_REPO_NAME/artifacts/$APP_VERSION/additions/vulnerabilities"
-                        ''',
-                        returnStdout: true
-                    ).trim()
+                    while (waited < maxWait) {
+                        vulnResult = sh(
+                            script: '''
+                                curl -sk -u "$HARBOR_USER:$HARBOR_PASS" \
+                                "https://$DOCKER_REGISTRY_URL_OPS/api/v2.0/projects/$DOCKER_PROJECT_NAME/repositories/$DOCKER_REPO_NAME/artifacts/$APP_VERSION/additions/vulnerabilities"
+                            ''',
+                            returnStdout: true
+                        ).trim()
 
-                    if (vulnResult != '{}' && vulnResult != '[]' && vulnResult.length() > 5) {
-                        found = true
-                        break
-                    }
-
-                    echo("아직 취약점 데이터가 없습니다. ${interval}초 후 재시도 (경과: ${waited}s)")
-                    sleep interval
-                    waited += interval
-                }
-
-                if (!found) {
-                    error("Harbor 취약점 결과를 ${maxWait}초 내에 받지 못했습니다.")
-                }
-
-                def parsed = readJSON text: vulnResult
-                def reportKey = parsed.keySet().find { it.startsWith('application/vnd.scanner.adapter.vuln.report.harbor') }
-                def report = parsed[reportKey]
-                def severity = report?.severity ?: 'Unknown'
-                def vulnerabilities = report?.vulnerabilities ?: []
-
-                echo("취약점 등급 : ${severity}")
-                def cveList = vulnerabilities.collect { it.id }.join(', ')
-                echo("취약점 코드 : ${cveList ?: '없음'}")
-
-                if (severity.toLowerCase() == 'critical') {
-                    echo("Critical 취약점 발견")
-                    // error("Critical 취약점 발견: 파이프라인 실패 처리")
-                } else {
-                    echo("Critical 취약점 없음, latest 태그 push 실행")
-                    container('docker-dind') {
-                        withCredentials([usernamePassword(
-                            credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                            usernameVariable: 'HARBOR_USER',
-                            passwordVariable: 'HARBOR_PASS'
-                        )]) {
-                            sh '''
-                                echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
-                                docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
-                            '''
+                        if (vulnResult != '{}' && vulnResult != '[]' && vulnResult.length() > 5) {
+                            found = true
+                            break
                         }
-                    }
-                }
 
-                echo("취약점 상세 결과: ${vulnResult}")
+                        echo("아직 취약점 데이터가 없습니다. ${interval}초 후 재시도 (경과: ${waited}s)")
+                        sleep interval
+                        waited += interval
+                    }
+
+                    if (!found) {
+                        error("Harbor 취약점 결과를 ${maxWait}초 내에 받지 못했습니다.")
+                    }
+
+                    def parsed = readJSON text: vulnResult
+                    def reportKey = parsed.keySet().find { it.startsWith('application/vnd.scanner.adapter.vuln.report.harbor') }
+                    def report = parsed[reportKey]
+                    def severity = report?.severity ?: 'Unknown'
+                    def vulnerabilities = report?.vulnerabilities ?: []
+
+                    echo("취약점 등급 : ${severity}")
+                    def cveList = vulnerabilities.collect { it.id }.join(', ')
+                    echo("취약점 코드 : ${cveList ?: '없음'}")
+
+                    if (severity.toLowerCase() == 'critical') {
+                        echo("Critical 취약점 발견")
+                        notifyRedmine("HARBOR_SCAN_FAIL")
+                        // error("Critical 취약점 발견: 파이프라인 실패 처리")
+                    } else {
+                        echo("Critical 취약점 없음, latest 태그 push 실행")
+                        container('docker-dind') {
+                            withCredentials([usernamePassword(
+                                credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                                usernameVariable: 'HARBOR_USER',
+                                passwordVariable: 'HARBOR_PASS'
+                            )]) {
+                                sh '''
+                                    echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
+                                    docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
+                                '''
+                            }
+                        }
+                        notifyRedmine("HARBOR_SCAN_SUCCESS")
+                    }
+
+                    echo("취약점 상세 결과: ${vulnResult}")
+                }
+            } catch (err) {
+                echo("[Harbor Image Scan] 실패: ${err}")
+                notifyRedmine("HARBOR_SCAN_FAIL")
+                error("Harbor Image Scan 단계에서 오류 발생")
             }
         }
 
@@ -476,115 +515,124 @@ def harborImageScan() {
 
 def gitOpsDeploy() {
     stage('GitOps Deploy') {
-        echo("===============[GitOps Deploy] 단계 시작===============")
+        notifyRedmine("GITOPS_DEPLOY_START")
+        try {
+            echo("===============[GitOps Deploy] 단계 시작===============")
 
-        git(
-            url: env.GITOPS_URL,
-            branch: env.GITOPS_BRANCH,
-            credentialsId: env.GITOPS_CREDENTIALS_ID
-        )
+            git(
+                url: env.GITOPS_URL,
+                branch: env.GITOPS_BRANCH,
+                credentialsId: env.GITOPS_CREDENTIALS_ID
+            )
 
-        script {
-            dir(env.GITOPS_DIR) {
-                withCredentials([usernamePassword(
-                    credentialsId: env.GITOPS_CREDENTIALS_ID,
-                    passwordVariable: 'GITOPS_PASSWORD',
-                    usernameVariable: 'GITOPS_USERNAME'
-                )]) {
+            script {
+                dir(env.GITOPS_DIR) {
+                    withCredentials([usernamePassword(
+                        credentialsId: env.GITOPS_CREDENTIALS_ID,
+                        passwordVariable: 'GITOPS_PASSWORD',
+                        usernameVariable: 'GITOPS_USERNAME'
+                    )]) {
 
-                    def currentVersion = sh(
-                        script: "grep 'newTag:' kustomization.yaml | awk -F ':' '{print \$2}' | head -n 1",
-                        returnStdout: true
-                    ).trim().replaceAll('"', '')
-
-                    echo("현재 버전: ${currentVersion}")
-                    echo("신규 버전: ${env.APP_VERSION}")
-
-                    def featureBranch = "${env.GITOPS_CONTAINER_NAME}-${env.BUILD_NUMBER}"
-
-                    if (currentVersion != env.APP_VERSION) {
-                        echo("버전이 다릅니다. 업데이트를 진행합니다.")
-                        sh """
-                            git config --global user.email "jenkins@okestro.com"
-                            git config --global user.name "jenkins"
-                            git checkout -b ${featureBranch}
-
-                            sed -i 's|newTag:.*|newTag: "${env.APP_VERSION}"|g' kustomization.yaml
-
-                            git add kustomization.yaml
-                            git commit -m "Update image version: ${env.APP_VERSION}"
-                            git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} ${featureBranch}
-                        """
-
-                        def giteaApiUrl = env.GITOPS_API_URL
-
-                        def prNumber = sh(
-                            script: """
-                                curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
-                                    -X POST "${giteaApiUrl}/pulls" \\
-                                    -H "Content-Type: application/json" \\
-                                    -d '{
-                                        "head": "${featureBranch}",
-                                        "base": "${env.GITOPS_BRANCH}",
-                                        "title": "Auto-created by Jenkins",
-                                        "body": "Update image version: ${env.APP_VERSION}"
-                                    }' \
-                                | sed -n 's/.*"number":[ ]*\\([0-9]*\\).*/\\1/p'
-                            """,
+                        def currentVersion = sh(
+                            script: "grep 'newTag:' kustomization.yaml | awk -F ':' '{print \$2}' | head -n 1",
                             returnStdout: true
-                        ).trim()
+                        ).trim().replaceAll('"', '')
 
-                        echo "생성된 PR 번호: ${prNumber}"
+                        echo("현재 버전: ${currentVersion}")
+                        echo("신규 버전: ${env.APP_VERSION}")
 
-                        def merged = false
-                        def retryCnt = 0
-                        while (!merged && retryCnt < 10) {
-                            def merge = sh(
+                        def featureBranch = "${env.GITOPS_CONTAINER_NAME}-${env.BUILD_NUMBER}"
+
+                        if (currentVersion != env.APP_VERSION) {
+                            echo("버전이 다릅니다. 업데이트를 진행합니다.")
+                            sh """
+                                git config --global user.email "jenkins@okestro.com"
+                                git config --global user.name "jenkins"
+                                git checkout -b ${featureBranch}
+
+                                sed -i 's|newTag:.*|newTag: "${env.APP_VERSION}"|g' kustomization.yaml
+
+                                git add kustomization.yaml
+                                git commit -m "Update image version: ${env.APP_VERSION}"
+                                git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} ${featureBranch}
+                            """
+
+                            def giteaApiUrl = env.GITOPS_API_URL
+
+                            def prNumber = sh(
                                 script: """
                                     curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
-                                        -X POST "${giteaApiUrl}/pulls/${prNumber}/merge" \\
+                                        -X POST "${giteaApiUrl}/pulls" \\
                                         -H "Content-Type: application/json" \\
                                         -d '{
-                                            "do": "merge",
-                                            "merge_method": "merge",
-                                            "commit_title": "Auto-merged by Jenkins",
-                                            "commit_message": "Update image version: ${env.APP_VERSION}"
-                                        }'
+                                            "head": "${featureBranch}",
+                                            "base": "${env.GITOPS_BRANCH}",
+                                            "title": "Auto-created by Jenkins",
+                                            "body": "Update image version: ${env.APP_VERSION}"
+                                        }' \
+                                    | sed -n 's/.*"number":[ ]*\\([0-9]*\\).*/\\1/p'
                                 """,
                                 returnStdout: true
                             ).trim()
 
-                            echo("Merge response : ${merge}")
-                            if (merge.contains("try")) {
-                                echo("Gitea Merge Failed, Retry")
-                                retryCnt++
-                                sleep 5
-                            } else {
-                                merged = true
-                            }
-                        }
+                            echo "생성된 PR 번호: ${prNumber}"
 
-                        if (merged) {
-                            sleep 5
-                            sh("git checkout ${env.GITOPS_BRANCH}")
-                            sh("git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} --delete ${featureBranch}")
-                            echo("Gitea Merge Success, Feature Branch Deleted")
+                            def merged = false
+                            def retryCnt = 0
+                            while (!merged && retryCnt < 10) {
+                                def merge = sh(
+                                    script: """
+                                        curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
+                                            -X POST "${giteaApiUrl}/pulls/${prNumber}/merge" \\
+                                            -H "Content-Type: application/json" \\
+                                            -d '{
+                                                "do": "merge",
+                                                "merge_method": "merge",
+                                                "commit_title": "Auto-merged by Jenkins",
+                                                "commit_message": "Update image version: ${env.APP_VERSION}"
+                                            }'
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+
+                                echo("Merge response : ${merge}")
+                                if (merge.contains("try")) {
+                                    echo("Gitea Merge Failed, Retry")
+                                    retryCnt++
+                                    sleep 5
+                                } else {
+                                    merged = true
+                                }
+                            }
+
+                            if (merged) {
+                                sleep 5
+                                sh("git checkout ${env.GITOPS_BRANCH}")
+                                sh("git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} --delete ${featureBranch}")
+                                echo("Gitea Merge Success, Feature Branch Deleted")
+                            } else {
+                                error("Gitea Merge Failed")
+                            }
                         } else {
-                            error("Gitea Merge Failed")
+                            echo("버전이 동일합니다. 업데이트가 필요하지 않습니다.")
                         }
-                    } else {
-                        echo("버전이 동일합니다. 업데이트가 필요하지 않습니다.")
                     }
                 }
             }
-        }
 
-        echo("===============[GitOps Deploy] 단계 종료===============")
+            echo("===============[GitOps Deploy] 단계 종료===============")
+            notifyRedmine("GITOPS_DEPLOY_SUCCESS")
+        } catch (err) {
+            echo("[GitOps Deploy] 실패: ${err}")
+            notifyRedmine("GITOPS_DEPLOY_FAIL")
+            error("GitOps Deploy 단계에서 오류 발생")
+        }
     }
 }
 
 def transferEmptyFileToFtc() {
     stage('Transfer File To FTC') {
+        notifyRedmine("FTC_TRANSFER_START")
         try {
             echo("===============[Transfer File To FTC] 단계 시작===============")
 
@@ -609,8 +657,10 @@ EOF
             '''
 
             echo("===============[Transfer File To FTC] 단계 종료===============")
+            notifyRedmine("FTC_TRANSFER_SUCCESS")
         } catch (err) {
             echo("[Transfer File To FTC] 실패: ${err}")
+            notifyRedmine("FTC_TRANSFER_FAIL")
             error("FTC 전송 단계에서 오류 발생")
         }
     }
@@ -618,6 +668,7 @@ EOF
 
 def transferSourceArchiveToFtc(String sourceDir = 'source') {
     stage('Transfer Source Archive To FTC') {
+        notifyRedmine("FTC_SOURCE_ARCHIVE_START")
         try {
             echo("===============[Transfer Source Archive To FTC] 단계 시작===============")
 
@@ -659,8 +710,10 @@ def transferSourceArchiveToFtc(String sourceDir = 'source') {
             """
 
             echo("===============[Transfer Source Archive To FTC] 단계 종료===============")
+            notifyRedmine("FTC_SOURCE_ARCHIVE_SUCCESS")
         } catch (err) {
             echo("[Transfer Source Archive To FTC] 실패: ${err}")
+            notifyRedmine("FTC_SOURCE_ARCHIVE_FAIL")
             error("FTC 소스 압축 전송 단계에서 오류 발생")
         }
     }
@@ -668,6 +721,7 @@ def transferSourceArchiveToFtc(String sourceDir = 'source') {
 
 def checkTag(String repoName, String headSha) {
     stage('Tag 확인') {
+        notifyRedmine("CHECK_TAG_START")
         try {
             echo("===============[Tag 확인] 단계 시작===============")
 
@@ -682,6 +736,7 @@ def checkTag(String repoName, String headSha) {
 
             if (!matchedTag) {
                 echo "❌ Tag가 없습니다. 빌드배포를 위해 Tag가 필수입니다."
+                notifyRedmine("CHECK_TAG_FAIL")
                 currentBuild.result = 'ABORTED'
                 error("Tag 없음으로 파이프라인 종료")
             }
@@ -690,8 +745,10 @@ def checkTag(String repoName, String headSha) {
             echo "✅ Tag 확인: ${env.APP_VERSION}"
 
             echo("===============[Tag 확인] 단계 종료===============")
+            notifyRedmine("CHECK_TAG_SUCCESS")
         } catch (err) {
             echo("[Tag 확인] 실패: ${err}")
+            notifyRedmine("CHECK_TAG_FAIL")
             error("Tag 확인 단계에서 오류 발생")
         }
     }
@@ -699,6 +756,7 @@ def checkTag(String repoName, String headSha) {
 
 def mergePR(String repoName, String prNumber) {
     stage('PR Merge') {
+        notifyRedmine("PR_MERGE_START")
         try {
             echo("===============[PR Merge] 단계 시작===============")
 
@@ -714,12 +772,15 @@ def mergePR(String repoName, String prNumber) {
             if (mergeResponse.status == 200) {
                 echo "✅ Merge 완료 - ${repoName} PR #${prNumber}"
             } else {
+                notifyRedmine("PR_MERGE_FAIL")
                 error("Merge 실패 - ${mergeResponse.status}")
             }
 
             echo("===============[PR Merge] 단계 종료===============")
+            notifyRedmine("PR_MERGE_SUCCESS")
         } catch (err) {
             echo("[PR Merge] 실패: ${err}")
+            notifyRedmine("PR_MERGE_FAIL")
             error("PR Merge 단계에서 오류 발생")
         }
     }
