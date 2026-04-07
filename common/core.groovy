@@ -412,12 +412,10 @@ def dockerBuild() {
         try {
             echo("===============[Docker Build] 단계 시작===============")
 
-            container('docker-dind') {
-                sh '''
-                    docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" .
-                    docker tag "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
-                '''
-            }
+            sh '''
+                docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" .
+                docker tag "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
+            '''
 
             echo("===============[Docker Build] 단계 종료===============")
         } catch (err) {
@@ -431,18 +429,16 @@ def dockerPush() {
     stage('Docker Push') {
         echo("===============[Docker Push] 단계 시작===============")
 
-        container('docker-dind') {
-            withCredentials([usernamePassword(
-                credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                usernameVariable: 'HARBOR_USER',
-                passwordVariable: 'HARBOR_PASS'
-            )]) {
-                sh '''
-                    set -e
-                    echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
-                    docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION"
-                '''
-            }
+        withCredentials([usernamePassword(
+            credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+            usernameVariable: 'HARBOR_USER',
+            passwordVariable: 'HARBOR_PASS'
+        )]) {
+            sh '''
+                set -e
+                echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
+                docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION"
+            '''
         }
 
         echo("===============[Docker Push] 단계 종료===============")
@@ -507,17 +503,15 @@ def harborImageScan() {
                     error("Critical 취약점 발견: ${cveList ?: '상세 정보 없음'}")
                 } else {
                     echo("Critical 취약점 없음, latest 태그 push 실행")
-                    container('docker-dind') {
-                        withCredentials([usernamePassword(
-                            credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                            usernameVariable: 'HARBOR_USER',
-                            passwordVariable: 'HARBOR_PASS'
-                        )]) {
-                            sh '''
-                                echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
-                                docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
-                            '''
-                        }
+                    withCredentials([usernamePassword(
+                        credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                        usernameVariable: 'HARBOR_USER',
+                        passwordVariable: 'HARBOR_PASS'
+                    )]) {
+                        sh '''
+                            echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
+                            docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
+                        '''
                     }
                 }
 
