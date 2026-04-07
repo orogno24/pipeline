@@ -1,3 +1,6 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurperClassic
+
 def checkout() {
     stage('Git Checkout') {
         try {
@@ -25,42 +28,123 @@ def checkout() {
     }
 }
 
-def notifyRedmine(String status = "START") {
+def createRedmineIssue(String status = "START") {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-
         def commitSha = sh(
             script: 'git rev-parse HEAD',
             returnStdout: true
         ).trim()
 
         def version = env.APP_VERSION ?: 'latest'
-
-        def subject = "[Jenkins] ${env.JOB_NAME} - ${status} - ${version}"
+        def subject = "[Jenkins] ${env.JOB_NAME} - ${version}"
         def description = """\
-배포 상태: ${status}
+배포 시작
 
+상태: ${status}
 브랜치: ${env.GIT_BRANCH}
 태그: ${version}
 커밋: ${commitSha}
 빌드 번호: ${env.BUILD_NUMBER}
 """
 
-        sh """
-        cat > redmine_issue.json <<EOF
-{
-  "issue": {
-    "project_id": "msaproject",
-    "subject": "${subject}",
-    "description": "${description}"
-  }
-}
-EOF
+        def payload = [
+            issue: [
+                project_id : "msaproject",
+                subject    : subject,
+                description: description
+            ]
+        ]
 
-        curl -sS -X POST "${env.REDMINE_URL}/issues.json" \
-          -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
-          -H "Content-Type: application/json" \
-          --data @redmine_issue.json
+        writeFile file: 'redmine_create.json', text: JsonOutput.toJson(payload)
+
+        def response = sh(
+            script: """
+                curl -sS -X POST "${env.REDMINE_URL}/issues.json" \
+                  -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+                  -H "Content-Type: application/json" \
+                  --data @redmine_create.json
+            """,
+            returnStdout: true
+        ).trim()
+
+        def json = new JsonSlurperClassic().parseText(response)
+        env.REDMINE_ISSUE_ID = "${json.issue.id}"
+
+        echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
+    }
+}
+
+def appendRedmineNote(String step, String result, String detail = "") {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID가 없어 Redmine note 추가를 건너뜁니다."
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def note = """\
+[${step}] ${result}
+브랜치: ${env.GIT_BRANCH}
+태그: ${env.APP_VERSION ?: 'latest'}
+빌드 번호: ${env.BUILD_NUMBER}
+${detail}
+"""
+
+        def payload = [
+            issue: [
+                notes: note
+            ]
+        ]
+
+        writeFile file: 'redmine_note.json', text: JsonOutput.toJson(payload)
+
+        sh """
+            curl -sS -X PUT "${env.REDMINE_URL}/issues/${env.REDMINE_ISSUE_ID}.json" \
+              -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+              -H "Content-Type: application/json" \
+              --data @redmine_note.json
         """
+    }
+}
+
+def updateRedmineIssueStatus(String result, String detail = "") {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID가 없어 Redmine 상태 업데이트를 건너뜁니다."
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def note = """\
+[PIPELINE] ${result}
+브랜치: ${env.GIT_BRANCH}
+태그: ${env.APP_VERSION ?: 'latest'}
+빌드 번호: ${env.BUILD_NUMBER}
+${detail}
+"""
+
+        def payload = [
+            issue: [
+                notes: note
+            ]
+        ]
+
+        writeFile file: 'redmine_final.json', text: JsonOutput.toJson(payload)
+
+        sh """
+            curl -sS -X PUT "${env.REDMINE_URL}/issues/${env.REDMINE_ISSUE_ID}.json" \
+              -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+              -H "Content-Type: application/json" \
+              --data @redmine_final.json
+        """
+    }
+}
+
+def runStepWithRedmine(String stepName, Closure body) {
+    try {
+        body()
+        appendRedmineNote(stepName, "SUCCESS", "${stepName} 단계 성공")
+    } catch (err) {
+        appendRedmineNote(stepName, "FAIL", "${stepName} 단계 실패: ${err.message}")
+        throw err
     }
 }
 
@@ -119,6 +203,7 @@ def gradleTest() {
                 echo('JUnit Test 성공적으로 실행 완료')
             } catch (err) {
                 echo('JUnit Test 실패')
+                throw err
             } finally {
                 sh('ls -al build/test-results/test || echo "리포트 디렉토리 없음"')
 
@@ -145,6 +230,7 @@ def mavenTest() {
                 echo('JUnit Test 성공적으로 실행 완료')
             } catch (err) {
                 echo('JUnit Test 실패')
+                throw err
             } finally {
                 sh('ls -al target/surefire-reports || echo "리포트 디렉토리 없음"')
 
@@ -229,6 +315,7 @@ def sonarAnalysis() {
                 echo("===============[Sonar Analysis] 단계 종료===============")
             } catch (err) {
                 echo("[Sonar Analysis] 실패: ${err}")
+                throw err
             }
         }
     }
@@ -251,6 +338,7 @@ def gradleSonarAnalysis() {
                 }
             } catch (err) {
                 echo("[Gradle Sonar Analysis] 실패: ${err}")
+                throw err
             }
         }
     }
@@ -277,7 +365,7 @@ def mavenSonarAnalysis() {
                 echo("===============[Maven Sonar Analysis] 단계 종료===============")
             } catch (err) {
                 echo("[Maven Sonar Analysis] 실패: ${err}")
-                echo("경고: Maven Sonar Analysis 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
+                throw err
             }
         }
     }
@@ -292,31 +380,20 @@ def sonarAnalysisResult() {
                 def reportTaskExists = fileExists('build/sonar/report-task.txt')
                 if (!reportTaskExists) {
                     def mavenReportTaskExists = fileExists('target/sonar/report-task.txt')
-
                     if (!mavenReportTaskExists) {
-                        echo("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다. 품질 게이트 검사를 건너뜁니다.")
-                        echo("===============[Sonar Analysis Result] 단계 종료===============")
-                        return
+                        error("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다.")
                     }
                 }
 
                 withSonarQubeEnv('sonarqube') {
                     timeout(time: 10, unit: 'MINUTES') {
-                        try {
-                            def qg = waitForQualityGate()
-                            echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
-                            if (qg.status != 'OK') {
-                                echo("소나큐브 품질 게이트 검사 실패: ${qg.status}")
-                                echo("경고: 품질 게이트 검사에 실패했지만 파이프라인은 계속 진행됩니다.")
-                            } else {
-                                echo("소나큐브 품질 게이트 검사 통과")
-                            }
-                        } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
-                            echo("소나큐브 분석 결과 대기 중 타임아웃이 발생했습니다.")
-                            echo("경고: 타임아웃이 발생했지만 파이프라인은 계속 진행됩니다.")
-                        } catch (Exception e) {
-                            echo("소나큐브 품질 게이트 검사 중 오류 발생: ${e.message}")
-                            echo("경고: 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
+                        def qg = waitForQualityGate()
+                        echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
+
+                        if (qg.status != 'OK') {
+                            error("소나큐브 품질 게이트 실패: ${qg.status}")
+                        } else {
+                            echo("소나큐브 품질 게이트 검사 통과")
                         }
                     }
                 }
@@ -324,7 +401,7 @@ def sonarAnalysisResult() {
                 echo("===============[Sonar Analysis Result] 단계 종료===============")
             } catch (err) {
                 echo("[Sonar Analysis Result] 실패: ${err}")
-                echo("경고: Sonar Analysis Result 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
+                throw err
             }
         }
     }
@@ -427,8 +504,7 @@ def harborImageScan() {
                 echo("취약점 코드 : ${cveList ?: '없음'}")
 
                 if (severity.toLowerCase() == 'critical') {
-                    echo("Critical 취약점 발견")
-                    // error("Critical 취약점 발견: 파이프라인 실패 처리")
+                    error("Critical 취약점 발견: ${cveList ?: '상세 정보 없음'}")
                 } else {
                     echo("Critical 취약점 없음, latest 태그 push 실행")
                     container('docker-dind') {
