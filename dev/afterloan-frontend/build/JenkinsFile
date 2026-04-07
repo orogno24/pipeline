@@ -1,3 +1,5 @@
+def core
+
 pipeline {
     agent {
         kubernetes {
@@ -54,12 +56,22 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
-        // ── 모노레포 내 프론트 빌드 경로 ───────────────────────────────
-        BUILD_CONTEXT = 'front'
+        // ── 소스 체크아웃 위치 / 빌드 경로 ─────────────────────────────
+        SOURCE_DIR = 'source'
+        BUILD_CONTEXT = 'source/front'
+
         SKIP_BUILD = 'false'
     }
 
     stages {
+        stage('Init') {
+            steps {
+                script {
+                    core = load 'common/core.groovy'
+                }
+            }
+        }
+
         stage('Webhook Info') {
             steps {
                 echo "Webhook received"
@@ -73,40 +85,50 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                script {
-                    def core = load 'common/core.groovy'
-                    core.checkout()
+                dir(env.SOURCE_DIR) {
+                    script {
+                        core.checkout()
+                    }
                 }
             }
         }
 
         stage('Detect Changes') {
             steps {
-                script {
-                    def changedFiles = ''
+                dir(env.SOURCE_DIR) {
+                    script {
+                        // 수동 실행이면 webhook payload 값이 없으므로 변경 감지 스킵
+                        if (!env.after?.trim() || env.after == 'null') {
+                            echo "Webhook 변수가 없어 변경 파일 감지를 생략합니다. 수동 실행으로 간주합니다."
+                            env.SKIP_BUILD = 'false'
+                            return
+                        }
 
-                    if (env.before?.trim() && env.after?.trim() && !env.before.startsWith('0000000')) {
-                        changedFiles = sh(
-                            script: "git diff --name-only ${env.before} ${env.after} || true",
-                            returnStdout: true
-                        ).trim()
-                    } else {
-                        changedFiles = sh(
-                            script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
-                            returnStdout: true
-                        ).trim()
+                        def changedFiles = ''
+
+                        if (env.before?.trim() && env.before != 'null' && !env.before.startsWith('0000000')) {
+                            changedFiles = sh(
+                                script: "git diff --name-only ${env.before} ${env.after} || true",
+                                returnStdout: true
+                            ).trim()
+                        } else {
+                            changedFiles = sh(
+                                script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
+                                returnStdout: true
+                            ).trim()
+                        }
+
+                        echo "Changed files:\n${changedFiles}"
+
+                        if (!changedFiles) {
+                            env.SKIP_BUILD = 'true'
+                        } else {
+                            def frontChanged = changedFiles.split('\n').any { it.startsWith('front/') }
+                            env.SKIP_BUILD = frontChanged ? 'false' : 'true'
+                        }
+
+                        echo "SKIP_BUILD = ${env.SKIP_BUILD}"
                     }
-
-                    echo "Changed files:\n${changedFiles}"
-
-                    if (!changedFiles) {
-                        env.SKIP_BUILD = 'true'
-                    } else {
-                        def frontChanged = changedFiles.split('\n').any { it.startsWith('front/') }
-                        env.SKIP_BUILD = frontChanged ? 'false' : 'true'
-                    }
-
-                    echo "SKIP_BUILD = ${env.SKIP_BUILD}"
                 }
             }
         }
@@ -117,7 +139,6 @@ pipeline {
             }
             steps {
                 script {
-                    def core = load 'common/core.groovy'
                     core.notifyRedmine("START")
 
                     container('gradle') {
@@ -154,8 +175,11 @@ pipeline {
     post {
         failure {
             script {
-                def core = load 'common/core.groovy'
-                core.notifyRedmine("FAIL")
+                if (core != null) {
+                    core.notifyRedmine("FAIL")
+                } else {
+                    echo "core.groovy 가 로드되지 않아 FAIL 알림을 생략합니다."
+                }
             }
         }
     }
