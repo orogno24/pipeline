@@ -49,7 +49,7 @@ def notifyRedmine(String status = "START") {
         cat > redmine_issue.json <<EOF
 {
   "issue": {
-    "project_id": "msaproject",
+    "project_id": "jt-genie-lam",
     "subject": "${subject}",
     "description": "${description}"
   }
