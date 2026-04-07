@@ -5,6 +5,24 @@ pipeline {
         }
     }
 
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'ref', value: '$.ref'],
+                [key: 'after', value: '$.after'],
+                [key: 'before', value: '$.before'],
+                [key: 'repository', value: '$.repository.full_name'],
+                [key: 'pusher', value: '$.pusher.username']
+            ],
+            causeString: 'Triggered on $ref by $pusher',
+            token: 'genie-us-dev-fe-token',
+            printContributedVariables: true,
+            printPostContent: true,
+            regexpFilterText: '$ref',
+            regexpFilterExpression: '^refs/heads/dev$'
+        )
+    }
+
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
@@ -16,7 +34,7 @@ pipeline {
         // ── Git 소스 (모노레포) ───────────────────────────────────────
         GIT_URL = 'http://gitea-http:3000/it-department/Genie-us.git'
         GIT_CREDENTIALS_ID = 'gitea-credentials'
-        GIT_BRANCH = 'main'
+        GIT_BRANCH = 'dev'
 
         // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
@@ -38,6 +56,7 @@ pipeline {
 
         // ── 모노레포 내 프론트 빌드 경로 ───────────────────────────────
         BUILD_CONTEXT = 'front'
+        SKIP_BUILD = 'false'
     }
 
     stages {
@@ -45,20 +64,62 @@ pipeline {
             steps {
                 echo "Webhook received"
                 echo "ref = ${env.ref}"
+                echo "before = ${env.before}"
                 echo "after = ${env.after}"
+                echo "repository = ${env.repository}"
+                echo "pusher = ${env.pusher}"
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    def core = load 'common/core.groovy'
+                    core.checkout()
+                }
+            }
+        }
+
+        stage('Detect Changes') {
+            steps {
+                script {
+                    def changedFiles = ''
+
+                    if (env.before?.trim() && env.after?.trim() && !env.before.startsWith('0000000')) {
+                        changedFiles = sh(
+                            script: "git diff --name-only ${env.before} ${env.after} || true",
+                            returnStdout: true
+                        ).trim()
+                    } else {
+                        changedFiles = sh(
+                            script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
+                            returnStdout: true
+                        ).trim()
+                    }
+
+                    echo "Changed files:\n${changedFiles}"
+
+                    if (!changedFiles) {
+                        env.SKIP_BUILD = 'true'
+                    } else {
+                        def frontChanged = changedFiles.split('\n').any { it.startsWith('front/') }
+                        env.SKIP_BUILD = frontChanged ? 'false' : 'true'
+                    }
+
+                    echo "SKIP_BUILD = ${env.SKIP_BUILD}"
+                }
             }
         }
 
         stage('Load and Run') {
+            when {
+                expression { env.SKIP_BUILD != 'true' }
+            }
             steps {
                 script {
                     def core = load 'common/core.groovy'
-
-                    // 모노레포 전체 checkout
-                    core.checkout()
                     core.notifyRedmine("START")
 
-                    // 1. 빌드 및 품질 분석
                     container('gradle') {
                         dir(env.BUILD_CONTEXT) {
                             core.build()
@@ -67,7 +128,6 @@ pipeline {
                         }
                     }
 
-                    // 2. 도커 이미지 빌드 및 푸시
                     container('docker-dind') {
                         dir(env.BUILD_CONTEXT) {
                             core.dockerBuild()
@@ -75,10 +135,18 @@ pipeline {
                         core.dockerPush()
                     }
 
-                    // 3. GitOps 배포 설정 업데이트
                     core.gitOpsDeploy()
                     core.notifyRedmine("SUCCESS")
                 }
+            }
+        }
+
+        stage('Skip Info') {
+            when {
+                expression { env.SKIP_BUILD == 'true' }
+            }
+            steps {
+                echo "front/ 경로 변경이 없어 프론트 파이프라인을 생략합니다."
             }
         }
     }
