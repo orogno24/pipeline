@@ -1,5 +1,4 @@
 import groovy.json.JsonOutput
-import groovy.json.JsonSlurperClassic
 
 def checkout() {
     stage('Git Checkout') {
@@ -49,7 +48,7 @@ def createRedmineIssue(String status = "START") {
 
         def payload = [
             issue: [
-                project_id : "msaproject",
+                project_id : "jt-genie-lam",
                 subject    : subject,
                 description: description
             ]
@@ -58,18 +57,31 @@ def createRedmineIssue(String status = "START") {
         writeFile file: 'redmine_create.json', text: JsonOutput.toJson(payload)
 
         def response = sh(
-            script: """
-                curl -sS -X POST "${env.REDMINE_URL}/issues.json" \
-                  -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+            script: '''
+                curl -sS -X POST "$REDMINE_URL/issues.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
                   -H "Content-Type: application/json" \
                   --data @redmine_create.json
-            """,
+            ''',
             returnStdout: true
         ).trim()
 
-        def json = new JsonSlurperClassic().parseText(response)
-        env.REDMINE_ISSUE_ID = "${json.issue.id}"
+        writeFile file: 'redmine_create_response.json', text: response
 
+        def issueId = sh(
+            script: '''
+                sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' redmine_create_response.json | head -n 1
+            ''',
+            returnStdout: true
+        ).trim()
+
+        if (!issueId) {
+            echo("Redmine issue 생성 응답에서 issue id를 추출하지 못했습니다.")
+            echo("response = ${response}")
+            error("Redmine issue id 추출 실패")
+        }
+
+        env.REDMINE_ISSUE_ID = issueId
         echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
     }
 }
@@ -97,12 +109,12 @@ ${detail}
 
         writeFile file: 'redmine_note.json', text: JsonOutput.toJson(payload)
 
-        sh """
-            curl -sS -X PUT "${env.REDMINE_URL}/issues/${env.REDMINE_ISSUE_ID}.json" \
-              -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+        sh '''
+            curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+              -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
               -H "Content-Type: application/json" \
               --data @redmine_note.json
-        """
+        '''
     }
 }
 
@@ -129,12 +141,12 @@ ${detail}
 
         writeFile file: 'redmine_final.json', text: JsonOutput.toJson(payload)
 
-        sh """
-            curl -sS -X PUT "${env.REDMINE_URL}/issues/${env.REDMINE_ISSUE_ID}.json" \
-              -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+        sh '''
+            curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+              -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
               -H "Content-Type: application/json" \
               --data @redmine_final.json
-        """
+        '''
     }
 }
 
