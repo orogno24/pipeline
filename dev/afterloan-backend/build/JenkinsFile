@@ -117,10 +117,12 @@ pipeline {
                         if (!changedFiles) {
                             env.SKIP_BUILD = 'true'
                         } else {
-                            def backendChanged = changedFiles.split('\n').any { it.startsWith('back-common/') }
-                            env.SKIP_BUILD = backendChanged ? 'false' : 'true'
-                        }
+                            def changedList = changedFiles ? changedFiles.split('\n') : []
+                            def backendChanged = changedList.any { it == 'back-common' || it.startsWith('back-common/') }
 
+                            env.SKIP_BUILD = backendChanged ? 'false' : 'true'
+                            echo "backendChanged = ${backendChanged}"
+                        }
                         echo "SKIP_BUILD = ${env.SKIP_BUILD}"
                     }
                 }
@@ -129,7 +131,7 @@ pipeline {
 
         stage('Build') {
             when {
-                expression { env.SKIP_BUILD != 'true' }
+                expression { env.SKIP_BUILD == 'false' }
             }
             steps {
                 container('gradle') {
@@ -146,7 +148,7 @@ pipeline {
 
         stage('Docker Build') {
             when {
-                expression { env.SKIP_BUILD != 'true' }
+                expression { env.SKIP_BUILD == 'false' }
             }
             steps {
                 container('docker-dind') {
@@ -161,7 +163,7 @@ pipeline {
 
         stage('Docker Push') {
             when {
-                expression { env.SKIP_BUILD != 'true' }
+                expression { env.SKIP_BUILD == 'false' }
             }
             steps {
                 container('docker-dind') {
@@ -174,7 +176,7 @@ pipeline {
 
         stage('GitOps Deploy') {
             when {
-                expression { env.SKIP_BUILD != 'true' }
+                expression { env.SKIP_BUILD == 'false' }
             }
             steps {
                 script {
