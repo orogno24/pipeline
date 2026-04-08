@@ -596,7 +596,7 @@ EOF
     }
 }
 
-def transferSourceArchiveToFtc(String sourceDir = 'source', String appName = 'app', String branchName = 'main') {
+def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '', String appName = 'app') {
     stage('Transfer Source Archive To FTC') {
         try {
             echo("===============[Transfer Source Archive To FTC] 단계 시작===============")
@@ -604,19 +604,28 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String appName = 'ap
             sh """
                 set -e
 
+                INPUT_ORG_NAME="${orgName}"
                 APP_NAME="${appName}"
-                BRANCH_NAME="${branchName}"
-                COMMIT_SHA=\$(git -C "${sourceDir}" rev-parse --short HEAD)
+
+                REMOTE_URL=\$(git -C "${sourceDir}" remote get-url origin || true)
+                AUTO_ORG_NAME=\$(printf '%s\n' "\${REMOTE_URL}" | sed -E 's#.+[:/]([^/]+)/[^/]+(\\.git)?#\\1#' || true)
+
+                if [ -n "\${INPUT_ORG_NAME}" ]; then
+                    ORG_NAME="\${INPUT_ORG_NAME}"
+                elif [ -n "\${AUTO_ORG_NAME}" ] && [ "\${AUTO_ORG_NAME}" != "\${REMOTE_URL}" ]; then
+                    ORG_NAME="\${AUTO_ORG_NAME}"
+                else
+                    ORG_NAME="unknown-org"
+                fi
+
                 BUILD_DATE=\$(date +%Y%m%d%H%M%S)
-                ARCHIVE_NAME="\${APP_NAME}-\${BRANCH_NAME}-${BUILD_NUMBER}-\${BUILD_DATE}-\${COMMIT_SHA}.tar.gz"
+
+                ARCHIVE_NAME="org=\${ORG_NAME}__app=\${APP_NAME}__build=${BUILD_NUMBER}__date=\${BUILD_DATE}.tar.gz"
 
                 echo "=== debug start ==="
-                id
-                whoami
-                pwd
-                ls -al
-                ls -al "${sourceDir}"
-                ls -ld /ftc-upload
+                echo "REMOTE_URL=\${REMOTE_URL}"
+                echo "ORG_NAME=\${ORG_NAME}"
+                echo "APP_NAME=\${APP_NAME}"
                 echo "ARCHIVE_NAME=\${ARCHIVE_NAME}"
                 echo "=== debug end ==="
 
