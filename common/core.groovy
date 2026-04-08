@@ -1,29 +1,30 @@
+import groovy.json.JsonOutput
+
 def createRedmineIssue(String status = "START") {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+
         def commitSha = sh(
             script: 'git rev-parse HEAD',
             returnStdout: true
         ).trim()
 
-        def version = env.APP_VERSION ?: 'unknown'
-        def subject = "[Jenkins] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${version}"
-        def description = """배포 시작
+        def version = env.APP_VERSION ?: 'latest'
 
-프로젝트: ${env.JOB_NAME}
+        def subject = "[Jenkins] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${version}"
+        def description = """배포 상태: ${status}
+
 브랜치: ${env.GIT_BRANCH}
 태그: ${version}
 커밋: ${commitSha}
 빌드 번호: ${env.BUILD_NUMBER}
-상태: ${status}
 빌드 URL: ${env.BUILD_URL ?: ''}
 """
 
         writeFile file: 'redmine_issue.json', text: """{
   "issue": {
     "project_id": "jt-genie-lam",
-    "subject": ${groovy.json.JsonOutput.toJson(subject)},
-    "description": ${groovy.json.JsonOutput.toJson(description)},
-    "done_ratio": 0
+    "subject": ${JsonOutput.toJson(subject)},
+    "description": ${JsonOutput.toJson(description)}
   }
 }"""
 
@@ -35,6 +36,7 @@ def createRedmineIssue(String status = "START") {
                   -H "Content-Type: application/json" \
                   --data @redmine_issue.json)
 
+                echo "Redmine create response: $RESPONSE" >&2
                 echo "$RESPONSE" | sed -n 's/.*"id":[ ]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1
             ''',
             returnStdout: true
@@ -56,13 +58,14 @@ def updateRedmineIssue(String note, Integer doneRatio = null) {
     }
 
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-        def ratioPart = doneRatio != null ? ""","done_ratio":${doneRatio}""" : ""
+        def issueMap = [notes: note]
+        if (doneRatio != null) {
+            issueMap.done_ratio = doneRatio
+        }
 
-        writeFile file: 'redmine_update.json', text: """{
-  "issue": {
-    "notes": ${groovy.json.JsonOutput.toJson(note)}${ratioPart}
-  }
-}"""
+        def payload = [issue: issueMap]
+
+        writeFile file: 'redmine_update.json', text: JsonOutput.toJson(payload)
 
         sh '''
             curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
@@ -97,3 +100,212 @@ def createOrUpdateStartIssue() {
         5
     )
 }
+
+def checkout() {
+    stage('Git Checkout') {
+        try {
+            echo("===============[Git Checkout] 단계 시작===============")
+
+            git(
+                url: env.GIT_URL,
+                branch: env.GIT_BRANCH,
+                credentialsId: env.GIT_CREDENTIALS_ID
+            )
+
+            env.APP_VERSION = sh(
+                script: 'git rev-parse --short HEAD',
+                returnStdout: true
+            ).trim()
+
+            echo("Checked out branch: ${env.GIT_BRANCH}")
+            echo("App Version: ${env.APP_VERSION}")
+
+            echo("===============[Git Checkout] 단계 종료===============")
+        } catch (err) {
+            echo("[Git Checkout] 실패: ${err}")
+            error("Git 체크아웃 단계에서 오류 발생")
+        }
+    }
+}
+
+def dockerBuild() {
+    stage('Docker Build') {
+        try {
+            markStage('Docker Build', 'START', 30)
+
+            echo("===============[Docker Build] 단계 시작===============")
+
+            container('docker-dind') {
+                sh '''
+                    docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" .
+                    docker tag "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
+                '''
+            }
+
+            echo("===============[Docker Build] 단계 종료===============")
+            markStage('Docker Build', 'SUCCESS', 60)
+        } catch (err) {
+            markStage('Docker Build', "FAIL - ${err}", 30)
+            echo("Docker Build 실패: ${err.getMessage()}")
+            error("Docker Build 단계에서 오류 발생")
+        }
+    }
+}
+
+def dockerPush() {
+    stage('Docker Push') {
+        try {
+            markStage('Docker Push', 'START', 70)
+
+            echo("===============[Docker Push] 단계 시작===============")
+
+            container('docker-dind') {
+                withCredentials([usernamePassword(
+                    credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                    usernameVariable: 'HARBOR_USER',
+                    passwordVariable: 'HARBOR_PASS'
+                )]) {
+                    sh '''
+                        set -e
+                        echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
+                        docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION"
+                    '''
+                }
+            }
+
+            echo("===============[Docker Push] 단계 종료===============")
+            markStage('Docker Push', 'SUCCESS', 85)
+        } catch (err) {
+            markStage('Docker Push', "FAIL - ${err}", 70)
+            throw err
+        }
+    }
+}
+
+def gitOpsDeploy() {
+    stage('GitOps Deploy') {
+        try {
+            markStage('GitOps Deploy', 'START', 90)
+
+            echo("===============[GitOps Deploy] 단계 시작===============")
+
+            git(
+                url: env.GITOPS_URL,
+                branch: env.GITOPS_BRANCH,
+                credentialsId: env.GITOPS_CREDENTIALS_ID
+            )
+
+            script {
+                dir(env.GITOPS_DIR) {
+                    withCredentials([usernamePassword(
+                        credentialsId: env.GITOPS_CREDENTIALS_ID,
+                        passwordVariable: 'GITOPS_PASSWORD',
+                        usernameVariable: 'GITOPS_USERNAME'
+                    )]) {
+
+                        def currentVersion = sh(
+                            script: "grep 'newTag:' kustomization.yaml | awk -F ':' '{print \$2}' | head -n 1",
+                            returnStdout: true
+                        ).trim().replaceAll('"', '')
+
+                        echo("현재 GitOps 이미지 태그: ${currentVersion}")
+                        echo("배포할 이미지 태그(APP_VERSION): ${env.APP_VERSION}")
+
+                        def featureBranch = "${env.GITOPS_CONTAINER_NAME}-${env.GIT_BRANCH}-${env.APP_VERSION}"
+
+                        if (currentVersion != env.APP_VERSION) {
+                            echo("이미지 태그가 달라 GitOps 업데이트를 진행합니다.")
+
+                            sh """
+                                git config --global user.email "jenkins@okestro.com"
+                                git config --global user.name "jenkins"
+                                git checkout -b ${featureBranch}
+
+                                sed -i 's|newTag:.*|newTag: "${env.APP_VERSION}"|g' kustomization.yaml
+
+                                git add kustomization.yaml
+                                git commit -m "[${env.GIT_BRANCH}] Update image tag to ${env.APP_VERSION}"
+                                git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} ${featureBranch}
+                            """
+
+                            def giteaApiUrl = env.GITOPS_API_URL
+
+                            def prNumber = sh(
+                                script: """
+                                    curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
+                                        -X POST "${giteaApiUrl}/pulls" \\
+                                        -H "Content-Type: application/json" \\
+                                        -d '{
+                                            "head": "${featureBranch}",
+                                            "base": "${env.GITOPS_BRANCH}",
+                                            "title": "[${env.GIT_BRANCH}] Update image tag to ${env.APP_VERSION}",
+                                            "body": "Auto-created by Jenkins webhook\\nBranch: ${env.GIT_BRANCH}\\nImage tag: ${env.APP_VERSION}"
+                                        }' \
+                                    | sed -n 's/.*"number":[ ]*\\([0-9]*\\).*/\\1/p'
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            updateRedmineIssue(
+                                """[GitOps Deploy] PR 생성 완료
+- PR 번호: ${prNumber}
+- Feature Branch: ${featureBranch}
+""",
+                                95
+                            )
+
+                            echo "생성된 PR 번호: ${prNumber}"
+
+                            def merged = false
+                            def retryCnt = 0
+                            while (!merged && retryCnt < 10) {
+                                def merge = sh(
+                                    script: """
+                                        curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
+                                            -X POST "${giteaApiUrl}/pulls/${prNumber}/merge" \\
+                                            -H "Content-Type: application/json" \\
+                                            -d '{
+                                                "do": "merge",
+                                                "merge_method": "merge",
+                                                "commit_title": "[${env.GIT_BRANCH}] Auto-merged by Jenkins",
+                                                "commit_message": "Update image tag to ${env.APP_VERSION}"
+                                            }'
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+
+                                echo("Merge response : ${merge}")
+                                if (merge.contains("try")) {
+                                    echo("Gitea Merge Failed, Retry")
+                                    retryCnt++
+                                    sleep 5
+                                } else {
+                                    merged = true
+                                }
+                            }
+
+                            if (merged) {
+                                sleep 5
+                                sh("git checkout ${env.GITOPS_BRANCH}")
+                                sh("git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} --delete ${featureBranch}")
+                                echo("Gitea Merge Success, Feature Branch Deleted")
+                            } else {
+                                error("Gitea Merge Failed")
+                            }
+                        } else {
+                            echo("현재 GitOps 태그와 동일하므로 업데이트하지 않습니다.")
+                        }
+                    }
+                }
+            }
+
+            echo("===============[GitOps Deploy] 단계 종료===============")
+            markStage('GitOps Deploy', 'SUCCESS', 100)
+        } catch (err) {
+            markStage('GitOps Deploy', "FAIL - ${err}", 90)
+            throw err
+        }
+    }
+}
+
+return this
