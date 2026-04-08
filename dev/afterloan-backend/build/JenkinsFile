@@ -26,10 +26,10 @@ pipeline {
     }
 
     environment {
-        BUILD_TOOL = 'gradle'
+        BUILD_TOOL = 'docker'
 
         // Git source
-        GIT_URL = 'http://gitea-http:3000/it-department/Genie-us.git'
+        GIT_URL = 'http://gitea-http:3000/it-department/genie-us-permission-service.git'
         GIT_CREDENTIALS_ID = 'gitea-credentials'
         GIT_BRANCH = 'dev'
 
@@ -53,7 +53,7 @@ pipeline {
 
         // checkout / build path
         SOURCE_DIR = 'source'
-        BUILD_CONTEXT = 'source/back-common'
+        BUILD_CONTEXT = 'source'
 
         SKIP_BUILD = 'false'
     }
@@ -114,33 +114,8 @@ pipeline {
 
                         echo "Changed files:\n${changedFiles}"
 
-                        if (!changedFiles) {
-                            env.SKIP_BUILD = 'true'
-                        } else {
-                            def changedList = changedFiles ? changedFiles.split('\n') : []
-                            def backendChanged = changedList.any { it == 'back-common' || it.startsWith('back-common/') }
-
-                            env.SKIP_BUILD = backendChanged ? 'false' : 'true'
-                            echo "backendChanged = ${backendChanged}"
-                        }
+                        env.SKIP_BUILD = changedFiles ? 'false' : 'true'
                         echo "SKIP_BUILD = ${env.SKIP_BUILD}"
-                    }
-                }
-            }
-        }
-
-        stage('Build') {
-            when {
-                expression { env.SKIP_BUILD == 'false' }
-            }
-            steps {
-                container('gradle') {
-                    dir(env.BUILD_CONTEXT) {
-                        script {
-                            core.build()
-                            core.sonarAnalysis()
-                            core.sonarAnalysisResult()
-                        }
                     }
                 }
             }
@@ -148,7 +123,7 @@ pipeline {
 
         stage('Docker Build') {
             when {
-                expression { env.SKIP_BUILD == 'false' }
+                expression { env.SKIP_BUILD != 'true' }
             }
             steps {
                 container('docker-dind') {
@@ -163,7 +138,7 @@ pipeline {
 
         stage('Docker Push') {
             when {
-                expression { env.SKIP_BUILD == 'false' }
+                expression { env.SKIP_BUILD != 'true' }
             }
             steps {
                 container('docker-dind') {
@@ -176,7 +151,7 @@ pipeline {
 
         stage('GitOps Deploy') {
             when {
-                expression { env.SKIP_BUILD == 'false' }
+                expression { env.SKIP_BUILD != 'true' }
             }
             steps {
                 script {
@@ -190,7 +165,7 @@ pipeline {
                 expression { env.SKIP_BUILD == 'true' }
             }
             steps {
-                echo "back-common/ 경로 변경이 없어 백엔드 파이프라인을 생략합니다."
+                echo "변경 파일이 없어 백엔드 파이프라인을 생략합니다."
             }
         }
     }
