@@ -8,7 +8,7 @@ pipeline {
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
-        
+
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
@@ -53,14 +53,97 @@ pipeline {
             steps {
                 script {
                     def core = load 'common/core.groovy'
-                    core.checkout()
-                    dir(env.BUILD_CONTEXT) {
-                        core.dockerBuild()
+
+                    try {
+                        core.checkout()
+                        core.createOrUpdateStartIssue()
+
+                        dir(env.BUILD_CONTEXT) {
+                            core.build()
+                            core.test()
+                            core.sonarAnalysis()
+                            core.sonarAnalysisResult()
+                            core.dockerBuild()
+                        }
+
+                        core.dockerPush()
+                        // 필요 시 사용
+                        // core.harborImageScan()
+                        core.gitOpsDeploy()
+
+                    } catch (err) {
+                        echo "Pipeline execution failed: ${err}"
+                        throw err
                     }
-                    core.dockerPush()
-                    core.gitOpsDeploy()
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            script {
+                def core = load 'common/core.groovy'
+                core.updateRedmineIssue(
+                    """[Pipeline] 전체 성공
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                    100
+                )
+            }
+        }
+        failure {
+            script {
+                def core = load 'common/core.groovy'
+                core.updateRedmineIssue(
+                    """[Pipeline] 전체 실패
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                    99
+                )
+            }
+        }
+        unstable {
+            script {
+                def core = load 'common/core.groovy'
+                core.updateRedmineIssue(
+                    """[Pipeline] UNSTABLE
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                    99
+                )
+            }
+        }
+        aborted {
+            script {
+                def core = load 'common/core.groovy'
+                core.updateRedmineIssue(
+                    """[Pipeline] 중단됨
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                    99
+                )
+            }
+        }
+        always {
+            echo "Pipeline finished: ${currentBuild.currentResult}"
+            echo "Redmine issue id: ${env.REDMINE_ISSUE_ID ?: 'N/A'}"
         }
     }
 }
