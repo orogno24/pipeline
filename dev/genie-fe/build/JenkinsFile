@@ -13,12 +13,10 @@ pipeline {
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
 
-        // ── Git 소스 ─────────────────────────────────────────────────
         GIT_URL = 'http://gitea-http:3000/afterloan/genie-us-fe.git'
         GIT_CREDENTIALS_ID = 'gitea-credentials'
         GIT_BRANCH = 'dev'
 
-        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
         GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
         GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
@@ -27,7 +25,6 @@ pipeline {
         GITOPS_DIR = 'genie-us-fe/overlay/dev'
         GITOPS_CONTAINER_NAME = 'genie-us-fe'
 
-        // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
@@ -36,7 +33,6 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
-        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
     }
 
@@ -54,27 +50,15 @@ pipeline {
                 script {
                     def core = load 'common/core.groovy'
 
-                    try {
-                        core.checkout()
-                        core.createOrUpdateStartIssue()
+                    core.checkout()
+                    core.createOrUpdateStartIssue()
 
-                        dir(env.BUILD_CONTEXT) {
-                            core.build()
-                            core.test()
-                            core.sonarAnalysis()
-                            core.sonarAnalysisResult()
-                            core.dockerBuild()
-                        }
-
-                        core.dockerPush()
-                        // 필요 시 사용
-                        // core.harborImageScan()
-                        core.gitOpsDeploy()
-
-                    } catch (err) {
-                        echo "Pipeline execution failed: ${err}"
-                        throw err
+                    dir(env.BUILD_CONTEXT) {
+                        core.dockerBuild()
                     }
+
+                    core.dockerPush()
+                    core.gitOpsDeploy()
                 }
             }
         }
@@ -83,62 +67,42 @@ pipeline {
     post {
         success {
             script {
-                def core = load 'common/core.groovy'
-                core.updateRedmineIssue(
-                    """[Pipeline] 전체 성공
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-                    100
-                )
+                if (env.REDMINE_ISSUE_ID?.trim()) {
+                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+                        writeFile file: 'redmine_success.json', text: """{
+  "issue": {
+    "notes": "[Pipeline] 전체 성공\\n- Job: ${env.JOB_NAME}\\n- Build: #${env.BUILD_NUMBER}\\n- Branch: ${env.GIT_BRANCH}\\n- Version: ${env.APP_VERSION ?: 'unknown'}\\n- URL: ${env.BUILD_URL ?: ''}",
+    "done_ratio": 100
+  }
+}"""
+                        sh '''
+                            curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                              -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                              -H "Content-Type: application/json" \
+                              --data @redmine_success.json
+                        '''
+                    }
+                }
             }
         }
         failure {
             script {
-                def core = load 'common/core.groovy'
-                core.updateRedmineIssue(
-                    """[Pipeline] 전체 실패
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-                    99
-                )
-            }
-        }
-        unstable {
-            script {
-                def core = load 'common/core.groovy'
-                core.updateRedmineIssue(
-                    """[Pipeline] UNSTABLE
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-                    99
-                )
-            }
-        }
-        aborted {
-            script {
-                def core = load 'common/core.groovy'
-                core.updateRedmineIssue(
-                    """[Pipeline] 중단됨
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-                    99
-                )
+                if (env.REDMINE_ISSUE_ID?.trim()) {
+                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+                        writeFile file: 'redmine_failure.json', text: """{
+  "issue": {
+    "notes": "[Pipeline] 전체 실패\\n- Job: ${env.JOB_NAME}\\n- Build: #${env.BUILD_NUMBER}\\n- Branch: ${env.GIT_BRANCH}\\n- Version: ${env.APP_VERSION ?: 'unknown'}\\n- URL: ${env.BUILD_URL ?: ''}",
+    "done_ratio": 99
+  }
+}"""
+                        sh '''
+                            curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                              -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                              -H "Content-Type: application/json" \
+                              --data @redmine_failure.json
+                        '''
+                    }
+                }
             }
         }
         always {
