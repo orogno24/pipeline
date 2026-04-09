@@ -23,8 +23,8 @@ def createRedmineIssue(String status = "START") {
         writeFile file: 'redmine_issue.json', text: """{
   "issue": {
     "project_id": "jt-genie-lam",
-    "subject": ${JsonOutput.toJson(subject)},
-    "description": ${JsonOutput.toJson(description)}
+    "subject": ${groovy.json.JsonOutput.toJson(subject)},
+    "description": ${groovy.json.JsonOutput.toJson(description)}
   }
 }"""
 
@@ -40,13 +40,12 @@ def createRedmineIssue(String status = "START") {
 
         echo "Redmine create response: ${response}"
 
-        def parsed = readJSON text: response
-
-        if (!parsed?.issue?.id) {
-            error("Redmine 이슈 생성 실패 - issue id 없음. response=${response}")
+        def matcher = (response =~ /"id":(\\d+)/)
+        if (!matcher.find()) {
+            error("Redmine 이슈 생성 실패 - id 추출 실패. response=${response}")
         }
 
-        env.REDMINE_ISSUE_ID = parsed.issue.id.toString()
+        env.REDMINE_ISSUE_ID = matcher.group(1)
         echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
     }
 }
