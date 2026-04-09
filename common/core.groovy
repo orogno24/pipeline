@@ -219,7 +219,7 @@ def test() {
             if (env.BUILD_TOOL == 'gradle') {
                 gradleTest()
             } else if (env.BUILD_TOOL == 'maven') {
-                mavenBuild()
+                mavenTest()
             } else {
                 error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             }
@@ -272,7 +272,7 @@ def mavenTest() {
             if (reportsExist) {
                 junit('**/target/surefire-reports/*.xml')
             } else {
-                echo 'JUnit 리포트 파일이 존재하지 않아 junit 스텝을 건너뜜니다.'
+                echo 'JUnit 리포트 파일이 존재하지 않아 junit 스텝을 건너뜁니다.'
             }
         }
 
