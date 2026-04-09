@@ -199,7 +199,7 @@ def build() {
             echo("===============[Build] 단계 시작===============")
 
             if (env.BUILD_TOOL == 'gradle') {
-                gradleBuild()
+                error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             } else if (env.BUILD_TOOL == 'maven') {
                 mavenBuild()
             } else {
