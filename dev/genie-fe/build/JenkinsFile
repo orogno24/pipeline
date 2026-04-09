@@ -8,7 +8,7 @@ pipeline {
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
-        
+
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
@@ -58,7 +58,20 @@ pipeline {
                     def core = load 'common/core.groovy'
 
                     core.checkout()
-                    core.createOrUpdateStartIssue()
+
+                    env.REDMINE_ISSUE_ID = core.createRedmineIssue("START")
+                    echo "Jenkinsfile stored REDMINE_ISSUE_ID = ${env.REDMINE_ISSUE_ID}"
+
+                    core.updateRedmineIssue(
+                        """[Pipeline] 시작
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                        5
+                    )
 
                     dir(env.BUILD_CONTEXT) {
                         core.dockerBuild()
