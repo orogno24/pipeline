@@ -34,6 +34,7 @@ def createRedmineIssue(String status = "시작") {
         def payload = [
             issue: [
                 project_id : "jt-genie-lam",
+                tracker_id : 4,   
                 subject    : subject,
                 description: description,
                 done_ratio : 0
