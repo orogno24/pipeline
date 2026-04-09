@@ -20,13 +20,13 @@ def createRedmineIssue(String status = "START") {
 빌드 URL: ${env.BUILD_URL ?: ''}
 """
 
-        writeFile file: 'redmine_issue.json', text: """{
-  "issue": {
-    "project_id": "jt-genie-lam",
-    "subject": ${groovy.json.JsonOutput.toJson(subject)},
-    "description": ${groovy.json.JsonOutput.toJson(description)}
-  }
-}"""
+        writeFile file: 'redmine_issue.json', text: JsonOutput.toJson([
+            issue: [
+                project_id : 'jt-genie-lam',
+                subject    : subject,
+                description: description
+            ]
+        ])
 
         def issueId = sh(
             script: '''
@@ -38,7 +38,7 @@ def createRedmineIssue(String status = "START") {
                 | tee redmine_create_response.json \
                 | grep -o '"id":[0-9]*' \
                 | head -1 \
-                | cut -d':' -f2
+                | cut -d: -f2
             ''',
             returnStdout: true
         ).trim()
@@ -46,14 +46,10 @@ def createRedmineIssue(String status = "START") {
         echo "Redmine issue created: ${issueId}"
 
         if (!issueId) {
-            def rawResponse = ''
-            if (fileExists('redmine_create_response.json')) {
-                rawResponse = readFile('redmine_create_response.json')
-            }
-            error("Redmine 이슈 생성 실패 - id 추출 실패. response=${rawResponse}")
+            error("Redmine 이슈 생성 실패 - id 추출 실패")
         }
 
-        env.REDMINE_ISSUE_ID = issueId
+        return issueId
     }
 }
 
@@ -89,26 +85,6 @@ def markStage(String stageName, String result, Integer doneRatio) {
 - URL: ${env.BUILD_URL ?: ''}
 """
     updateRedmineIssue(msg, doneRatio)
-}
-
-def createOrUpdateStartIssue() {
-    createRedmineIssue("START")
-
-    if (!env.REDMINE_ISSUE_ID?.trim()) {
-        echo "REDMINE_ISSUE_ID 생성 실패로 시작 업데이트를 건너뜁니다."
-        return
-    }
-
-    updateRedmineIssue(
-        """[Pipeline] 시작
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-        5
-    )
 }
 
 def checkout() {
