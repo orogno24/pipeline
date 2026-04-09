@@ -8,7 +8,7 @@ pipeline {
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
-
+        
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
@@ -39,7 +39,7 @@ pipeline {
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
 
-        // Redmine issue id 저장용
+        // ── Redmine issue id 저장용 ──────────────────────────────────
         REDMINE_ISSUE_ID = ''
     }
 
@@ -57,11 +57,58 @@ pipeline {
                 script {
                     def core = load 'common/core.groovy'
 
+                    // 1) 소스 체크아웃
                     core.checkout()
 
-                    env.REDMINE_ISSUE_ID = core.createRedmineIssue("START")
-                    echo "Jenkinsfile stored REDMINE_ISSUE_ID = ${env.REDMINE_ISSUE_ID}"
+                    // 2) Jenkinsfile에서 직접 Redmine 이슈 생성
+                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+                        def commitSha = sh(
+                            script: 'git rev-parse HEAD',
+                            returnStdout: true
+                        ).trim()
 
+                        def version = env.APP_VERSION ?: 'latest'
+                        def subject = "[Jenkins] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${version}"
+                        def description = """배포 상태: START
+
+브랜치: ${env.GIT_BRANCH}
+태그: ${version}
+커밋: ${commitSha}
+빌드 번호: ${env.BUILD_NUMBER}
+빌드 URL: ${env.BUILD_URL ?: ''}
+"""
+
+                        writeFile file: 'redmine_issue.json', text: groovy.json.JsonOutput.toJson([
+                            issue: [
+                                project_id : 'jt-genie-lam',
+                                subject    : subject,
+                                description: description
+                            ]
+                        ])
+
+                        env.REDMINE_ISSUE_ID = sh(
+                            script: '''
+                                set -e
+                                curl -sS -X POST "$REDMINE_URL/issues.json" \
+                                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                                  -H "Content-Type: application/json" \
+                                  --data @redmine_issue.json \
+                                | tee redmine_create_response.json \
+                                | grep -o '"id":[0-9]*' \
+                                | head -1 \
+                                | cut -d: -f2
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        echo "Jenkinsfile stored REDMINE_ISSUE_ID = ${env.REDMINE_ISSUE_ID}"
+
+                        if (!env.REDMINE_ISSUE_ID?.trim()) {
+                            error("Redmine 이슈 생성 실패 - issue id 추출 실패")
+                        }
+                    }
+
+                    // 3) 파이프라인 시작 기록
                     core.updateRedmineIssue(
                         """[Pipeline] 시작
 - Job: ${env.JOB_NAME}
@@ -73,6 +120,7 @@ pipeline {
                         5
                     )
 
+                    // 4) 기존 잘 되던 흐름 유지
                     dir(env.BUILD_CONTEXT) {
                         core.dockerBuild()
                     }
