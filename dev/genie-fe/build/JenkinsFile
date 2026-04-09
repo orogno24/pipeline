@@ -8,7 +8,7 @@ pipeline {
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
-        
+
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
@@ -89,14 +89,17 @@ pipeline {
                         env.REDMINE_ISSUE_ID = sh(
                             script: '''
                                 set -e
-                                curl -sS -X POST "$REDMINE_URL/issues.json" \
+                                RESPONSE=$(curl -sS -X POST "$REDMINE_URL/issues.json" \
                                   -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
                                   -H "Content-Type: application/json" \
-                                  --data @redmine_issue.json \
-                                | tee redmine_create_response.json \
-                                | grep -o '"id":[0-9]*' \
-                                | head -1 \
-                                | cut -d: -f2
+                                  --data @redmine_issue.json)
+
+                                echo "Redmine create response: $RESPONSE" >&2
+
+                                echo "$RESPONSE" \
+                                  | grep -o '"id":[0-9]*' \
+                                  | head -1 \
+                                  | cut -d: -f2
                             ''',
                             returnStdout: true
                         ).trim()
