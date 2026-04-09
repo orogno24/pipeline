@@ -1,7 +1,5 @@
 import groovy.json.JsonOutput
 
-import groovy.json.JsonOutput
-
 def createRedmineIssue(String status = "START") {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
 
@@ -22,13 +20,13 @@ def createRedmineIssue(String status = "START") {
 빌드 URL: ${env.BUILD_URL ?: ''}
 """
 
-        writeFile file: 'redmine_issue.json', text: """{
-  "issue": {
-    "project_id": "jt-genie-lam",
-    "subject": ${JsonOutput.toJson(subject)},
-    "description": ${JsonOutput.toJson(description)}
-  }
-}"""
+        writeFile file: 'redmine_issue.json', text: JsonOutput.toJson([
+            issue: [
+                project_id : 'jt-genie-lam',
+                subject    : subject,
+                description: description
+            ]
+        ])
 
         def response = sh(
             script: '''
@@ -42,28 +40,26 @@ def createRedmineIssue(String status = "START") {
 
         echo "Redmine create response: ${response}"
 
-        // Jenkins CPS/Sandbox에서 제일 안전하게 문자열로 id 추출
-        def marker = '"id":'
-        def idPos = response.indexOf(marker)
-        if (idPos < 0) {
-            error("Redmine 이슈 생성 실패 - id marker 없음. response=${response}")
+        writeFile file: 'redmine_create_response.json', text: response
+
+        def issueId = sh(
+            script: '''
+                python3 - <<'PY'
+import json
+with open('redmine_create_response.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+issue_id = data.get('issue', {}).get('id')
+print(issue_id if issue_id is not None else "")
+PY
+            ''',
+            returnStdout: true
+        ).trim()
+
+        if (!issueId) {
+            error("Redmine 이슈 생성 실패 - issue id 추출 실패. response=${response}")
         }
 
-        def start = idPos + marker.length()
-        while (start < response.length() && Character.isWhitespace(response.charAt(start))) {
-            start++
-        }
-
-        def end = start
-        while (end < response.length() && Character.isDigit(response.charAt(end))) {
-            end++
-        }
-
-        if (start == end) {
-            error("Redmine 이슈 생성 실패 - 숫자 id 추출 실패. response=${response}")
-        }
-
-        env.REDMINE_ISSUE_ID = response.substring(start, end)
+        env.REDMINE_ISSUE_ID = issueId
         echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
     }
 }
@@ -80,9 +76,7 @@ def updateRedmineIssue(String note, Integer doneRatio = null) {
             issueMap.done_ratio = doneRatio
         }
 
-        def payload = [issue: issueMap]
-
-        writeFile file: 'redmine_update.json', text: JsonOutput.toJson(payload)
+        writeFile file: 'redmine_update.json', text: JsonOutput.toJson([issue: issueMap])
 
         sh '''
             curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
@@ -106,6 +100,12 @@ def markStage(String stageName, String result, Integer doneRatio) {
 
 def createOrUpdateStartIssue() {
     createRedmineIssue("START")
+
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID 생성 실패로 시작 업데이트를 건너뜁니다."
+        return
+    }
+
     updateRedmineIssue(
         """[Pipeline] 시작
 - Job: ${env.JOB_NAME}
@@ -136,7 +136,6 @@ def checkout() {
 
             echo("Checked out branch: ${env.GIT_BRANCH}")
             echo("App Version: ${env.APP_VERSION}")
-
             echo("===============[Git Checkout] 단계 종료===============")
         } catch (err) {
             echo("[Git Checkout] 실패: ${err}")
@@ -212,106 +211,98 @@ def gitOpsDeploy() {
                 credentialsId: env.GITOPS_CREDENTIALS_ID
             )
 
-            script {
-                dir(env.GITOPS_DIR) {
-                    withCredentials([usernamePassword(
-                        credentialsId: env.GITOPS_CREDENTIALS_ID,
-                        passwordVariable: 'GITOPS_PASSWORD',
-                        usernameVariable: 'GITOPS_USERNAME'
-                    )]) {
+            dir(env.GITOPS_DIR) {
+                withCredentials([usernamePassword(
+                    credentialsId: env.GITOPS_CREDENTIALS_ID,
+                    passwordVariable: 'GITOPS_PASSWORD',
+                    usernameVariable: 'GITOPS_USERNAME'
+                )]) {
 
-                        def currentVersion = sh(
-                            script: "grep 'newTag:' kustomization.yaml | awk -F ':' '{print \$2}' | head -n 1",
+                    def currentVersion = sh(
+                        script: "grep 'newTag:' kustomization.yaml | awk -F ':' '{print \$2}' | head -n 1",
+                        returnStdout: true
+                    ).trim().replaceAll('"', '')
+
+                    echo("현재 GitOps 이미지 태그: ${currentVersion}")
+                    echo("배포할 이미지 태그(APP_VERSION): ${env.APP_VERSION}")
+
+                    def featureBranch = "${env.GITOPS_CONTAINER_NAME}-${env.GIT_BRANCH}-${env.APP_VERSION}"
+
+                    if (currentVersion != env.APP_VERSION) {
+                        echo("이미지 태그가 달라 GitOps 업데이트를 진행합니다.")
+
+                        sh """
+                            git config --global user.email "jenkins@okestro.com"
+                            git config --global user.name "jenkins"
+                            git checkout -b ${featureBranch}
+
+                            sed -i 's|newTag:.*|newTag: "${env.APP_VERSION}"|g' kustomization.yaml
+
+                            git add kustomization.yaml
+                            git commit -m "[${env.GIT_BRANCH}] Update image tag to ${env.APP_VERSION}"
+                            git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} ${featureBranch}
+                        """
+
+                        def prNumber = sh(
+                            script: """
+                                curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
+                                  -X POST "${env.GITOPS_API_URL}/pulls" \\
+                                  -H "Content-Type: application/json" \\
+                                  -d '{
+                                    "head": "${featureBranch}",
+                                    "base": "${env.GITOPS_BRANCH}",
+                                    "title": "[${env.GIT_BRANCH}] Update image tag to ${env.APP_VERSION}",
+                                    "body": "Auto-created by Jenkins webhook\\nBranch: ${env.GIT_BRANCH}\\nImage tag: ${env.APP_VERSION}"
+                                  }' | sed -n 's/.*"number":[ ]*\\([0-9]*\\).*/\\1/p'
+                            """,
                             returnStdout: true
-                        ).trim().replaceAll('"', '')
+                        ).trim()
 
-                        echo("현재 GitOps 이미지 태그: ${currentVersion}")
-                        echo("배포할 이미지 태그(APP_VERSION): ${env.APP_VERSION}")
+                        updateRedmineIssue(
+                            """[GitOps Deploy] PR 생성 완료
+- PR 번호: ${prNumber}
+- Feature Branch: ${featureBranch}
+""",
+                            95
+                        )
 
-                        def featureBranch = "${env.GITOPS_CONTAINER_NAME}-${env.GIT_BRANCH}-${env.APP_VERSION}"
-
-                        if (currentVersion != env.APP_VERSION) {
-                            echo("이미지 태그가 달라 GitOps 업데이트를 진행합니다.")
-
-                            sh """
-                                git config --global user.email "jenkins@okestro.com"
-                                git config --global user.name "jenkins"
-                                git checkout -b ${featureBranch}
-
-                                sed -i 's|newTag:.*|newTag: "${env.APP_VERSION}"|g' kustomization.yaml
-
-                                git add kustomization.yaml
-                                git commit -m "[${env.GIT_BRANCH}] Update image tag to ${env.APP_VERSION}"
-                                git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} ${featureBranch}
-                            """
-
-                            def giteaApiUrl = env.GITOPS_API_URL
-
-                            def prNumber = sh(
+                        def merged = false
+                        def retryCnt = 0
+                        while (!merged && retryCnt < 10) {
+                            def merge = sh(
                                 script: """
                                     curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
-                                        -X POST "${giteaApiUrl}/pulls" \\
-                                        -H "Content-Type: application/json" \\
-                                        -d '{
-                                            "head": "${featureBranch}",
-                                            "base": "${env.GITOPS_BRANCH}",
-                                            "title": "[${env.GIT_BRANCH}] Update image tag to ${env.APP_VERSION}",
-                                            "body": "Auto-created by Jenkins webhook\\nBranch: ${env.GIT_BRANCH}\\nImage tag: ${env.APP_VERSION}"
-                                        }' \
-                                    | sed -n 's/.*"number":[ ]*\\([0-9]*\\).*/\\1/p'
+                                      -X POST "${env.GITOPS_API_URL}/pulls/${prNumber}/merge" \\
+                                      -H "Content-Type: application/json" \\
+                                      -d '{
+                                        "do": "merge",
+                                        "merge_method": "merge",
+                                        "commit_title": "[${env.GIT_BRANCH}] Auto-merged by Jenkins",
+                                        "commit_message": "Update image tag to ${env.APP_VERSION}"
+                                      }'
                                 """,
                                 returnStdout: true
                             ).trim()
 
-                            updateRedmineIssue(
-                                """[GitOps Deploy] PR 생성 완료
-- PR 번호: ${prNumber}
-- Feature Branch: ${featureBranch}
-""",
-                                95
-                            )
-
-                            echo "생성된 PR 번호: ${prNumber}"
-
-                            def merged = false
-                            def retryCnt = 0
-                            while (!merged && retryCnt < 10) {
-                                def merge = sh(
-                                    script: """
-                                        curl -s -u ${GITOPS_USERNAME}:${GITOPS_PASSWORD} \\
-                                            -X POST "${giteaApiUrl}/pulls/${prNumber}/merge" \\
-                                            -H "Content-Type: application/json" \\
-                                            -d '{
-                                                "do": "merge",
-                                                "merge_method": "merge",
-                                                "commit_title": "[${env.GIT_BRANCH}] Auto-merged by Jenkins",
-                                                "commit_message": "Update image tag to ${env.APP_VERSION}"
-                                            }'
-                                    """,
-                                    returnStdout: true
-                                ).trim()
-
-                                echo("Merge response : ${merge}")
-                                if (merge.contains("try")) {
-                                    echo("Gitea Merge Failed, Retry")
-                                    retryCnt++
-                                    sleep 5
-                                } else {
-                                    merged = true
-                                }
-                            }
-
-                            if (merged) {
+                            echo("Merge response : ${merge}")
+                            if (merge.contains("try")) {
+                                retryCnt++
                                 sleep 5
-                                sh("git checkout ${env.GITOPS_BRANCH}")
-                                sh("git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} --delete ${featureBranch}")
-                                echo("Gitea Merge Success, Feature Branch Deleted")
                             } else {
-                                error("Gitea Merge Failed")
+                                merged = true
                             }
-                        } else {
-                            echo("현재 GitOps 태그와 동일하므로 업데이트하지 않습니다.")
                         }
+
+                        if (merged) {
+                            sleep 5
+                            sh("git checkout ${env.GITOPS_BRANCH}")
+                            sh("git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} --delete ${featureBranch}")
+                            echo("Gitea Merge Success, Feature Branch Deleted")
+                        } else {
+                            error("Gitea Merge Failed")
+                        }
+                    } else {
+                        echo("현재 GitOps 태그와 동일하므로 업데이트하지 않습니다.")
                     }
                 }
             }
