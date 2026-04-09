@@ -28,25 +28,24 @@ def createRedmineIssue(String status = "START") {
   }
 }"""
 
-        def issueId = sh(
+        def response = sh(
             script: '''
-                set -e
-                RESPONSE=$(curl -sS -X POST "$REDMINE_URL/issues.json" \
+                curl -sS -X POST "$REDMINE_URL/issues.json" \
                   -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
                   -H "Content-Type: application/json" \
-                  --data @redmine_issue.json)
-
-                echo "Redmine create response: $RESPONSE" >&2
-                echo "$RESPONSE" | sed -n 's/.*"id":[ ]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1
+                  --data @redmine_issue.json
             ''',
             returnStdout: true
         ).trim()
 
-        if (!issueId) {
-            error("Redmine 이슈 생성 실패")
+        echo "Redmine create response: ${response}"
+
+        def matcher = (response =~ /"issue"\s*:\s*\{\s*"id"\s*:\s*(\d+)/)
+        if (!matcher.find()) {
+            error("Redmine 이슈 생성 실패 - issue id 추출 불가. response=${response}")
         }
 
-        env.REDMINE_ISSUE_ID = issueId
+        env.REDMINE_ISSUE_ID = matcher.group(1).toString()
         echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
     }
 }
