@@ -11,7 +11,7 @@ def jsonEscape(val) {
         .replace("\n", "\\n")
 }
 
-def createRedmineIssue(String status = "START") {
+def createRedmineIssue(String status = "시작") {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
         def commitSha = sh(
             script: 'git rev-parse HEAD',
@@ -143,7 +143,7 @@ def markStage(String stageName, String result, Integer doneRatio) {
 }
 
 def createOrUpdateStartIssue() {
-    createRedmineIssue("START")
+    createRedmineIssue("시작")
     updateRedmineIssue(
         """[Pipeline] 시작
 - Job: ${env.JOB_NAME}
@@ -157,12 +157,12 @@ def createOrUpdateStartIssue() {
 }
 
 def runStageWithRedmine(String stageName, Integer startRatio, Integer successRatio, Closure body) {
-    markStage(stageName, 'START', startRatio)
+    markStage(stageName, '시작', startRatio)
     try {
         body()
-        markStage(stageName, 'SUCCESS', successRatio)
+        markStage(stageName, '성공', successRatio)
     } catch (err) {
-        markStage(stageName, "FAIL - ${err}", startRatio)
+        markStage(stageName, "실패 - ${err}", startRatio)
         throw err
     }
 }
@@ -219,7 +219,7 @@ def test() {
             if (env.BUILD_TOOL == 'gradle') {
                 gradleTest()
             } else if (env.BUILD_TOOL == 'maven') {
-                mavenTest()
+                mavenBuild()
             } else {
                 error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             }
@@ -272,7 +272,7 @@ def mavenTest() {
             if (reportsExist) {
                 junit('**/target/surefire-reports/*.xml')
             } else {
-                echo 'JUnit 리포트 파일이 존재하지 않아 junit 스텝을 건너뜁니다.'
+                echo 'JUnit 리포트 파일이 존재하지 않아 junit 스텝을 건너뜜니다.'
             }
         }
 
@@ -329,7 +329,7 @@ def mavenBuild() {
 
 def sonarAnalysis() {
     stage('정적 코드 분석') {
-        markStage('정적 코드 분석', 'START', 60)
+        markStage('정적 코드 분석', '시작', 60)
         try {
             echo("===============[정적 코드 분석] 단계 시작===============")
 
@@ -341,10 +341,10 @@ def sonarAnalysis() {
                 error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             }
 
-            markStage('정적 코드 분석', 'SUCCESS', 65)
+            markStage('정적 코드 분석', '성공', 65)
             echo("===============[정적 코드 분석] 단계 종료===============")
         } catch (err) {
-            markStage('정적 코드 분석', "FAIL - ${err}", 60)
+            markStage('정적 코드 분석', "실패 - ${err}", 60)
             echo("[정적 코드 분석] 실패: ${err}")
         }
     }
@@ -398,7 +398,7 @@ def mavenSonarAnalysis() {
 
 def sonarAnalysisResult() {
     stage('소나큐브 분석 결과') {
-        markStage('소나큐브 분석 결과', 'START', 66)
+        markStage('소나큐브 분석 결과', '시작', 66)
         try {
             echo("===============[소나큐브 분석 결과] 단계 시작===============")
 
@@ -437,10 +437,10 @@ def sonarAnalysisResult() {
                 }
             }
 
-            markStage('소나큐브 분석 결과', 'SUCCESS', 70)
+            markStage('소나큐브 분석 결과', '성공', 70)
             echo("===============[소나큐브 분석 결과] 단계 종료===============")
         } catch (err) {
-            markStage('소나큐브 분석 결과', "FAIL - ${err}", 66)
+            markStage('소나큐브 분석 결과', "실패 - ${err}", 66)
             echo("[소나큐브 분석 결과] 실패: ${err}")
             echo("경고: 소나큐브 분석 결과 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
         }
@@ -490,7 +490,7 @@ def dockerPush() {
 
 def harborImageScan() {
     stage('이미지 검사') {
-        markStage('이미지 검사', 'START', 91)
+        markStage('이미지 검사', '시작', 91)
         try {
             echo("===============[이미지 검사] 단계 시작===============")
 
@@ -572,10 +572,10 @@ def harborImageScan() {
                 echo("취약점 상세 결과: ${vulnResult}")
             }
 
-            markStage('이미지 검사', 'SUCCESS', 95)
+            markStage('이미지 검사', '성공', 95)
             echo("===============[이미지 검사] 단계 종료===============")
         } catch (err) {
-            markStage('이미지 검사', "FAIL - ${err}", 91)
+            markStage('이미지 검사', "실패 - ${err}", 91)
             error("이미지 검사 단계에서 오류 발생")
         }
     }
