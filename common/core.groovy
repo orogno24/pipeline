@@ -170,7 +170,7 @@ def runStageWithRedmine(String stageName, Integer startRatio, Integer successRat
 def checkout() {
     stage('소스코드 체크아웃') {
         try {
-            echo("===============[Git 체크아웃] 단계 시작===============")
+            echo("===============[소스코드 체크아웃] 단계 시작===============")
 
             git(
                 url: env.GIT_URL,
@@ -185,10 +185,10 @@ def checkout() {
 
             echo("Checked out branch: ${env.GIT_BRANCH}")
             echo("App Version: ${env.APP_VERSION}")
-            echo("===============[Git 체크아웃] 단계 종료===============")
+            echo("===============[소스코드 체크아웃] 단계 종료===============")
         } catch (err) {
-            echo("[Git Checkout] 실패: ${err}")
-            error("Git 체크아웃 단계에서 오류 발생")
+            echo("[소스코드 체크아웃] 실패: ${err}")
+            error("소스코드 체크아웃 단계에서 오류 발생")
         }
     }
 }
@@ -196,7 +196,7 @@ def checkout() {
 def build() {
     stage('소스코드 빌드') {
         runStageWithRedmine('소스코드 빌드', 25, 40) {
-            echo("===============[Build] 단계 시작===============")
+            echo("===============[소스코드 빌드] 단계 시작===============")
 
             if (env.BUILD_TOOL == 'gradle') {
                 gradleBuild()
@@ -206,7 +206,7 @@ def build() {
                 error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             }
 
-            echo("===============[Build] 단계 종료===============")
+            echo("===============[소스코드 빌드] 단계 종료===============")
         }
     }
 }
@@ -214,7 +214,7 @@ def build() {
 def test() {
     stage('테스트') {
         runStageWithRedmine('테스트', 45, 55) {
-            echo("===============[Test] 단계 시작===============")
+            echo("===============[테스트] 단계 시작===============")
 
             if (env.BUILD_TOOL == 'gradle') {
                 gradleTest()
@@ -224,14 +224,14 @@ def test() {
                 error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             }
 
-            echo("===============[Test] 단계 종료===============")
+            echo("===============[테스트] 단계 종료===============")
         }
     }
 }
 
 def gradleTest() {
     stage('Gradle 테스트') {
-        echo("===============[Gradle Test] 단계 시작===============")
+        echo("===============[Gradle 테스트] 단계 시작===============")
 
         try {
             sh('chmod +x ./gradlew')
@@ -251,13 +251,13 @@ def gradleTest() {
             }
         }
 
-        echo("===============[Gradle Test] 단계 종료===============")
+        echo("===============[Gradle 테스트] 단계 종료===============")
     }
 }
 
 def mavenTest() {
     stage('Maven 테스트') {
-        echo("===============[Maven Test] 단계 시작===============")
+        echo("===============[Maven 테스트] 단계 시작===============")
 
         try {
             sh('mvn test')
@@ -276,13 +276,13 @@ def mavenTest() {
             }
         }
 
-        echo("===============[Maven Test] 단계 종료===============")
+        echo("===============[Maven 테스트] 단계 종료===============")
     }
 }
 
 def gradleBuild() {
     stage('Gradle 빌드') {
-        echo("===============[Gradle Build] 단계 시작===============")
+        echo("===============[Gradle 빌드] 단계 시작===============")
 
         retry(3) {
             try {
@@ -300,13 +300,13 @@ def gradleBuild() {
             }
         }
 
-        echo("===============[Gradle Build] 단계 종료===============")
+        echo("===============[Gradle 빌드] 단계 종료===============")
     }
 }
 
 def mavenBuild() {
     stage('Maven 빌드') {
-        echo("===============[Maven Build] 단계 시작===============")
+        echo("===============[Maven 빌드] 단계 시작===============")
 
         retry(3) {
             try {
@@ -323,15 +323,15 @@ def mavenBuild() {
             }
         }
 
-        echo("===============[Maven Build] 단계 종료===============")
+        echo("===============[Maven 빌드] 단계 종료===============")
     }
 }
 
 def sonarAnalysis() {
     stage('정적 코드 분석') {
-        markStage('Sonar Analysis', 'START', 60)
+        markStage('정적 코드 분석', 'START', 60)
         try {
-            echo("===============[Sonar Analysis] 단계 시작===============")
+            echo("===============[정적 코드 분석] 단계 시작===============")
 
             if (env.BUILD_TOOL == 'gradle') {
                 gradleSonarAnalysis()
@@ -341,12 +341,11 @@ def sonarAnalysis() {
                 error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
             }
 
-            markStage('Sonar Analysis', 'SUCCESS', 65)
-            echo("===============[Sonar Analysis] 단계 종료===============")
+            markStage('정적 코드 분석', 'SUCCESS', 65)
+            echo("===============[정적 코드 분석] 단계 종료===============")
         } catch (err) {
-            markStage('Sonar Analysis', "FAIL - ${err}", 60)
-            echo("[Sonar Analysis] 실패: ${err}")
-            // Sonar는 실패해도 계속 진행
+            markStage('정적 코드 분석', "FAIL - ${err}", 60)
+            echo("[정적 코드 분석] 실패: ${err}")
         }
     }
 }
@@ -366,7 +365,7 @@ def gradleSonarAnalysis() {
                 """
             }
         } catch (err) {
-            echo("[Gradle Sonar Analysis] 실패: ${err}")
+            echo("[Gradle 정적 코드 분석] 실패: ${err}")
             throw err
         }
     }
@@ -375,7 +374,7 @@ def gradleSonarAnalysis() {
 def mavenSonarAnalysis() {
     stage('Maven 정적 코드 분석') {
         try {
-            echo("===============[Maven Sonar Analysis] 단계 시작===============")
+            echo("===============[Maven 정적 코드 분석] 단계 시작===============")
 
             withSonarQubeEnv('sonarqube') {
                 sh 'java -version'
@@ -389,9 +388,9 @@ def mavenSonarAnalysis() {
                 """
             }
 
-            echo("===============[Maven Sonar Analysis] 단계 종료===============")
+            echo("===============[Maven 정적 코드 분석] 단계 종료===============")
         } catch (err) {
-            echo("[Maven Sonar Analysis] 실패: ${err}")
+            echo("[Maven 정적 코드 분석] 실패: ${err}")
             throw err
         }
     }
@@ -399,9 +398,9 @@ def mavenSonarAnalysis() {
 
 def sonarAnalysisResult() {
     stage('소나큐브 분석 결과') {
-        markStage('Sonar Analysis Result', 'START', 66)
+        markStage('소나큐브 분석 결과', 'START', 66)
         try {
-            echo("===============[Sonar Analysis Result] 단계 시작===============")
+            echo("===============[소나큐브 분석 결과] 단계 시작===============")
 
             def reportTaskExists = fileExists('build/sonar/report-task.txt')
             if (!reportTaskExists) {
@@ -409,8 +408,8 @@ def sonarAnalysisResult() {
 
                 if (!mavenReportTaskExists) {
                     echo("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다. 품질 게이트 검사를 건너뜁니다.")
-                    updateRedmineIssue("[Sonar Analysis Result] report-task.txt 없음. 품질 게이트 생략", 68)
-                    echo("===============[Sonar Analysis Result] 단계 종료===============")
+                    updateRedmineIssue("[소나큐브 분석 결과] report-task.txt 없음. 품질 게이트 생략", 68)
+                    echo("===============[소나큐브 분석 결과] 단계 종료===============")
                     return
                 }
             }
@@ -422,28 +421,28 @@ def sonarAnalysisResult() {
                         echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
 
                         if (qg.status != 'OK') {
-                            updateRedmineIssue("[Sonar Analysis Result] 품질 게이트 실패: ${qg.status}", 68)
+                            updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 실패: ${qg.status}", 68)
                             echo("경고: 품질 게이트 검사에 실패했지만 파이프라인은 계속 진행됩니다.")
                         } else {
-                            updateRedmineIssue("[Sonar Analysis Result] 품질 게이트 통과", 70)
+                            updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 통과", 70)
                             echo("소나큐브 품질 게이트 검사 통과")
                         }
                     } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
-                        updateRedmineIssue("[Sonar Analysis Result] 품질 게이트 대기 타임아웃", 68)
+                        updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 대기 타임아웃", 68)
                         echo("소나큐브 분석 결과 대기 중 타임아웃이 발생했습니다.")
                     } catch (Exception e) {
-                        updateRedmineIssue("[Sonar Analysis Result] 품질 게이트 검사 오류: ${e.message}", 68)
+                        updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 검사 오류: ${e.message}", 68)
                         echo("소나큐브 품질 게이트 검사 중 오류 발생: ${e.message}")
                     }
                 }
             }
 
-            markStage('Sonar Analysis Result', 'SUCCESS', 70)
-            echo("===============[Sonar Analysis Result] 단계 종료===============")
+            markStage('소나큐브 분석 결과', 'SUCCESS', 70)
+            echo("===============[소나큐브 분석 결과] 단계 종료===============")
         } catch (err) {
-            markStage('Sonar Analysis Result', "FAIL - ${err}", 66)
-            echo("[Sonar Analysis Result] 실패: ${err}")
-            echo("경고: Sonar Analysis Result 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
+            markStage('소나큐브 분석 결과', "FAIL - ${err}", 66)
+            echo("[소나큐브 분석 결과] 실패: ${err}")
+            echo("경고: 소나큐브 분석 결과 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
         }
     }
 }
@@ -451,9 +450,7 @@ def sonarAnalysisResult() {
 def dockerBuild() {
     stage('이미지 빌드') {
         runStageWithRedmine('이미지 빌드', 72, 82) {
-            echo("===============[Docker Build] 단계 시작===============")
-
-            error("지원하지 않는 빌드 도구입니다.")
+            echo("===============[이미지 빌드] 단계 시작===============")
 
             container('docker-dind') {
                 sh '''
@@ -462,7 +459,7 @@ def dockerBuild() {
                 '''
             }
 
-            echo("===============[Docker Build] 단계 종료===============")
+            echo("===============[이미지 빌드] 단계 종료===============")
         }
     }
 }
@@ -470,7 +467,7 @@ def dockerBuild() {
 def dockerPush() {
     stage('이미지 푸시') {
         runStageWithRedmine('이미지 푸시', 83, 90) {
-            echo("===============[Docker Push] 단계 시작===============")
+            echo("===============[이미지 푸시] 단계 시작===============")
 
             container('docker-dind') {
                 withCredentials([usernamePassword(
@@ -486,16 +483,16 @@ def dockerPush() {
                 }
             }
 
-            echo("===============[Docker Push] 단계 종료===============")
+            echo("===============[이미지 푸시] 단계 종료===============")
         }
     }
 }
 
 def harborImageScan() {
     stage('이미지 검사') {
-        markStage('Harbor Image Scan', 'START', 91)
+        markStage('이미지 검사', 'START', 91)
         try {
-            echo("===============[Harbor Image Scan] 단계 시작===============")
+            echo("===============[이미지 검사] 단계 시작===============")
 
             withCredentials([usernamePassword(
                 credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
@@ -547,7 +544,7 @@ def harborImageScan() {
                 echo("취약점 코드 : ${cveList ?: '없음'}")
 
                 updateRedmineIssue(
-                    """[Harbor Image Scan] 완료
+                    """[이미지 검사] 완료
 - Severity: ${severity}
 - CVE: ${cveList ?: '없음'}
 """,
@@ -556,8 +553,6 @@ def harborImageScan() {
 
                 if (severity.toLowerCase() == 'critical') {
                     echo("Critical 취약점 발견")
-                    // 필요하면 여기서 실패 처리
-                    // error("Critical 취약점 발견: 파이프라인 실패 처리")
                 } else {
                     echo("Critical 취약점 없음, latest 태그 push 실행")
                     container('docker-dind') {
@@ -577,11 +572,11 @@ def harborImageScan() {
                 echo("취약점 상세 결과: ${vulnResult}")
             }
 
-            markStage('Harbor Image Scan', 'SUCCESS', 95)
-            echo("===============[Harbor Image Scan] 단계 종료===============")
+            markStage('이미지 검사', 'SUCCESS', 95)
+            echo("===============[이미지 검사] 단계 종료===============")
         } catch (err) {
-            markStage('Harbor Image Scan', "FAIL - ${err}", 91)
-            error("Harbor Image Scan 단계에서 오류 발생")
+            markStage('이미지 검사', "FAIL - ${err}", 91)
+            error("이미지 검사 단계에서 오류 발생")
         }
     }
 }
@@ -589,7 +584,7 @@ def harborImageScan() {
 def gitOpsDeploy() {
     stage('GitOps 배포') {
         runStageWithRedmine('GitOps 배포', 95, 100) {
-            echo("===============[GitOps Deploy] 단계 시작===============")
+            echo("===============[GitOps 배포] 단계 시작===============")
 
             git(
                 url: env.GITOPS_URL,
@@ -650,7 +645,7 @@ def gitOpsDeploy() {
                         echo "생성된 PR 번호: ${prNumber}"
 
                         updateRedmineIssue(
-                            """[GitOps Deploy] PR 생성 완료
+                            """[GitOps 배포] PR 생성 완료
 - PR 번호: ${prNumber}
 - Feature Branch: ${featureBranch}
 """,
@@ -691,7 +686,7 @@ def gitOpsDeploy() {
                             sh("git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} --delete ${featureBranch}")
 
                             updateRedmineIssue(
-                                """[GitOps Deploy] Merge 성공 및 feature branch 삭제 완료
+                                """[GitOps 배포] Merge 성공 및 feature branch 삭제 완료
 - PR 번호: ${prNumber}
 - 배포 태그: ${env.APP_VERSION}
 """,
@@ -701,7 +696,7 @@ def gitOpsDeploy() {
                             echo("Gitea Merge Success, Feature Branch Deleted")
                         } else {
                             updateRedmineIssue(
-                                """[GitOps Deploy] Merge 실패
+                                """[GitOps 배포] Merge 실패
 - PR 번호: ${prNumber}
 - Feature Branch: ${featureBranch}
 """,
@@ -711,7 +706,7 @@ def gitOpsDeploy() {
                         }
                     } else {
                         updateRedmineIssue(
-                            """[GitOps Deploy] 현재 GitOps 태그와 동일하여 업데이트 생략
+                            """[GitOps 배포] 현재 GitOps 태그와 동일하여 업데이트 생략
 - Current Tag: ${currentVersion}
 """,
                             100
@@ -721,7 +716,7 @@ def gitOpsDeploy() {
                 }
             }
 
-            echo("===============[GitOps Deploy] 단계 종료===============")
+            echo("===============[GitOps 배포] 단계 종료===============")
         }
     }
 }
@@ -729,7 +724,7 @@ def gitOpsDeploy() {
 def transferEmptyFileToFtc() {
     stage('FTC 전송') {
         runStageWithRedmine('FTC 전송', 96, 100) {
-            echo("===============[Transfer File To FTC] 단계 시작===============")
+            echo("===============[FTC 전송] 단계 시작===============")
 
             sh '''
                 set -e
@@ -751,7 +746,7 @@ EOF
                 ls -l /ftc-upload/"${FILE_NAME}"
             '''
 
-            echo("===============[Transfer File To FTC] 단계 종료===============")
+            echo("===============[FTC 전송] 단계 종료===============")
         }
     }
 }
@@ -759,7 +754,7 @@ EOF
 def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '', String appName = 'app') {
     stage('소스코드 FTC 전송') {
         runStageWithRedmine('소스코드 FTC 전송', 96, 100) {
-            echo("===============[Transfer Source Archive To FTC] 단계 시작===============")
+            echo("===============[소스코드 FTC 전송] 단계 시작===============")
 
             sh """
                 set -e
@@ -808,7 +803,7 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
                 ls -lh /ftc-upload/"\${ARCHIVE_NAME}"
             """
 
-            echo("===============[Transfer Source Archive To FTC] 단계 종료===============")
+            echo("===============[소스코드 FTC 전송] 단계 종료===============")
         }
     }
 }
