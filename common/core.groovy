@@ -1,5 +1,7 @@
 import groovy.json.JsonOutput
 
+import groovy.json.JsonOutput
+
 def createRedmineIssue(String status = "START") {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
 
@@ -23,8 +25,8 @@ def createRedmineIssue(String status = "START") {
         writeFile file: 'redmine_issue.json', text: """{
   "issue": {
     "project_id": "jt-genie-lam",
-    "subject": ${groovy.json.JsonOutput.toJson(subject)},
-    "description": ${groovy.json.JsonOutput.toJson(description)}
+    "subject": ${JsonOutput.toJson(subject)},
+    "description": ${JsonOutput.toJson(description)}
   }
 }"""
 
@@ -40,12 +42,28 @@ def createRedmineIssue(String status = "START") {
 
         echo "Redmine create response: ${response}"
 
-        def matcher = (response =~ /"id":(\\d+)/)
-        if (!matcher.find()) {
-            error("Redmine 이슈 생성 실패 - id 추출 실패. response=${response}")
+        // Jenkins CPS/Sandbox에서 제일 안전하게 문자열로 id 추출
+        def marker = '"id":'
+        def idPos = response.indexOf(marker)
+        if (idPos < 0) {
+            error("Redmine 이슈 생성 실패 - id marker 없음. response=${response}")
         }
 
-        env.REDMINE_ISSUE_ID = matcher.group(1)
+        def start = idPos + marker.length()
+        while (start < response.length() && Character.isWhitespace(response.charAt(start))) {
+            start++
+        }
+
+        def end = start
+        while (end < response.length() && Character.isDigit(response.charAt(end))) {
+            end++
+        }
+
+        if (start == end) {
+            error("Redmine 이슈 생성 실패 - 숫자 id 추출 실패. response=${response}")
+        }
+
+        env.REDMINE_ISSUE_ID = response.substring(start, end)
         echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
     }
 }
