@@ -97,9 +97,9 @@ pipeline {
                                 echo "Redmine create response: $RESPONSE" >&2
 
                                 echo "$RESPONSE" \
-                                  | grep -o '"id":[0-9]*' \
+                                  | grep -o 'id":[0-9][0-9]*' \
                                   | head -1 \
-                                  | cut -d: -f2
+                                  | tr -dc '0-9'
                             ''',
                             returnStdout: true
                         ).trim()
