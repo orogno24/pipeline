@@ -3,7 +3,7 @@ def core
 pipeline {
     agent {
         kubernetes {
-            label 'dind-gradle'
+            label 'jenkins-dind'
         }
     }
 
