@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+
 pipeline {
     agent {
         kubernetes {
@@ -8,17 +10,14 @@ pipeline {
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
-
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
 
-        // ── Git 소스 ─────────────────────────────────────────────────
         GIT_URL = 'http://gitea-http:3000/afterloan/genie-us-fe.git'
         GIT_CREDENTIALS_ID = 'gitea-credentials'
         GIT_BRANCH = 'dev'
 
-        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
         GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
         GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
@@ -27,7 +26,6 @@ pipeline {
         GITOPS_DIR = 'genie-us-fe/overlay/dev'
         GITOPS_CONTAINER_NAME = 'genie-us-fe'
 
-        // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
@@ -36,7 +34,6 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
-        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
     }
 
@@ -63,7 +60,6 @@ pipeline {
                         }
 
                         core.dockerPush()
-                        // 필요 시 사용
                         // core.harborImageScan()
                         core.gitOpsDeploy()
 
@@ -79,74 +75,64 @@ pipeline {
     post {
         success {
             script {
-                if (env.REDMINE_ISSUE_ID?.trim()) {
-                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-                        writeFile file: 'redmine_success.json', text: """{
-  "issue": {
-    "notes": "[Pipeline] 전체 성공\\n- Job: ${env.JOB_NAME}\\n- Build: #${env.BUILD_NUMBER}\\n- Branch: ${env.GIT_BRANCH}\\n- Version: ${env.APP_VERSION ?: 'unknown'}\\n- URL: ${env.BUILD_URL ?: ''}",
-    "done_ratio": 100
-  }
-}"""
-
-                        def httpCode = sh(
-                            script: '''
-                                set +e
-                                curl -sS -o redmine_post_success.txt -w "%{http_code}" \
-                                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
-                                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
-                                  -H "Content-Type: application/json" \
-                                  --data @redmine_success.json
-                            ''',
-                            returnStdout: true
-                        ).trim()
-
-                        def responseText = readFile('redmine_post_success.txt').trim()
-                        echo "Redmine post-success target issue: ${env.REDMINE_ISSUE_ID}"
-                        echo "Redmine post-success HTTP code: ${httpCode}"
-                        echo "Redmine post-success response: ${responseText}"
-
-                        if (!(httpCode in ['200', '204'])) {
-                            error("Redmine success post update failed: HTTP ${httpCode}, response=${responseText}")
-                        }
-                    }
-                }
+                updateRedminePost('성공', 100)
             }
         }
 
         failure {
             script {
-                if (env.REDMINE_ISSUE_ID?.trim()) {
-                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-                        writeFile file: 'redmine_failure.json', text: """{
-  "issue": {
-    "notes": "[Pipeline] 전체 실패\\n- Job: ${env.JOB_NAME}\\n- Build: #${env.BUILD_NUMBER}\\n- Branch: ${env.GIT_BRANCH}\\n- Version: ${env.APP_VERSION ?: 'unknown'}\\n- URL: ${env.BUILD_URL ?: ''}",
-    "done_ratio": 99
-  }
-}"""
-
-                        def httpCode = sh(
-                            script: '''
-                                set +e
-                                curl -sS -o redmine_post_failure.txt -w "%{http_code}" \
-                                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
-                                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
-                                  -H "Content-Type: application/json" \
-                                  --data @redmine_failure.json
-                            ''',
-                            returnStdout: true
-                        ).trim()
-
-                        def responseText = readFile('redmine_post_failure.txt').trim()
-                        echo "Redmine post-failure target issue: ${env.REDMINE_ISSUE_ID}"
-                        echo "Redmine post-failure HTTP code: ${httpCode}"
-                        echo "Redmine post-failure response: ${responseText}"
-
-                        if (!(httpCode in ['200', '204'])) {
-                            error("Redmine failure post update failed: HTTP ${httpCode}, response=${responseText}")
-                        }
-                    }
-                }
+                updateRedminePost('실패', 99)
             }
+        }
+    }
+}
+
+def updateRedminePost(String resultLabel, int doneRatio) {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def note = """[Pipeline] 전체 ${resultLabel}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+"""
+
+        def payload = [
+            issue: [
+                notes     : note,
+                done_ratio: doneRatio
+            ]
+        ]
+
+        writeFile(
+            file: 'redmine_post.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
+            script: '''
+                set +e
+                curl -sS -o redmine_post_response.txt -w "%{http_code}" \
+                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  --data @redmine_post.json
+            ''',
+            returnStdout: true
+        ).trim()
+
+        def responseText = readFile('redmine_post_response.txt').trim()
+        echo "Redmine post target issue: ${env.REDMINE_ISSUE_ID}"
+        echo "Redmine post HTTP code: ${httpCode}"
+        echo "Redmine post response: ${responseText}"
+
+        if (!(httpCode in ['200', '204'])) {
+            error("Redmine post update failed: HTTP ${httpCode}, response=${responseText}")
         }
     }
 }
