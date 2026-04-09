@@ -31,31 +31,50 @@ def createRedmineIssue(String status = "START") {
 빌드 URL: ${env.BUILD_URL ?: ''}
 """
 
-        writeFile file: 'redmine_issue.json', text: """{
-  "issue": {
-    "project_id": "jt-genie-lam",
-    "subject": ${groovy.json.JsonOutput.toJson(subject)},
-    "description": ${groovy.json.JsonOutput.toJson(description)},
-    "done_ratio": 0
-  }
-}"""
+        def payload = [
+            issue: [
+                project_id : "jt-genie-lam",
+                subject    : subject,
+                description: description,
+                done_ratio : 0
+            ]
+        ]
 
-        def issueId = sh(
+        writeFile(
+            file: 'redmine_issue.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
             script: '''
                 set -e
-                RESPONSE=$(curl -sS -X POST "$REDMINE_URL/issues.json" \
+                curl -sS -o redmine_create_response.json -w "%{http_code}" \
+                  -X POST "$REDMINE_URL/issues.json" \
                   -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
                   -H "Content-Type: application/json" \
-                  --data @redmine_issue.json)
-
-                echo "Redmine create response: $RESPONSE" >&2
-                echo "$RESPONSE" | sed -n 's/.*"id":[ ]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1
+                  --data @redmine_issue.json
             ''',
             returnStdout: true
         ).trim()
 
+        def responseText = readFile('redmine_create_response.json').trim()
+        echo "Redmine create HTTP code: ${httpCode}"
+        echo "Redmine create response: ${responseText}"
+
+        if (!(httpCode in ['200', '201'])) {
+            error("Redmine 이슈 생성 실패: HTTP ${httpCode}, response=${responseText}")
+        }
+
+        def parsed
+        try {
+            parsed = new JsonSlurperClassic().parseText(responseText)
+        } catch (err) {
+            error("Redmine create 응답 JSON 파싱 실패: ${err}\nresponse=${responseText}")
+        }
+
+        def issueId = parsed?.issue?.id?.toString()
         if (!issueId) {
-            error("Redmine 이슈 생성 실패: issue id를 추출하지 못했습니다.")
+            error("Redmine 이슈 생성 실패: issue.id를 찾지 못했습니다. response=${responseText}")
         }
 
         env.REDMINE_ISSUE_ID = issueId
@@ -84,17 +103,31 @@ def updateRedmineIssue(String note, Integer doneRatio = null, Integer statusId =
 
         def payload = [issue: issueMap]
 
-        def response = sh(
-            script: """
-                curl -sS -X PUT "${env.REDMINE_URL}/issues/${env.REDMINE_ISSUE_ID}.json" \
-                  -H "X-Redmine-API-Key: ${REDMINE_API_KEY}" \
+        writeFile(
+            file: 'redmine_update.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
+            script: '''
+                set +e
+                curl -sS -o redmine_update_response.txt -w "%{http_code}" \
+                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
                   -H "Content-Type: application/json" \
-                  -d '${JsonOutput.toJson(payload)}'
-            """,
+                  --data @redmine_update.json
+            ''',
             returnStdout: true
         ).trim()
 
-        echo "Redmine update response: ${response}"
+        def responseText = readFile('redmine_update_response.txt').trim()
+        echo "Redmine update target issue: ${env.REDMINE_ISSUE_ID}"
+        echo "Redmine update HTTP code: ${httpCode}"
+        echo "Redmine update response: ${responseText}"
+
+        if (!(httpCode in ['200', '204'])) {
+            error("Redmine 이슈 업데이트 실패: issue=${env.REDMINE_ISSUE_ID}, HTTP ${httpCode}, response=${responseText}")
+        }
     }
 }
 
