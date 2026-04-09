@@ -59,10 +59,6 @@ pipeline {
                         core.createOrUpdateStartIssue()
 
                         dir(env.BUILD_CONTEXT) {
-                            core.build()
-                            core.test()
-                            core.sonarAnalysis()
-                            core.sonarAnalysisResult()
                             core.dockerBuild()
                         }
 
