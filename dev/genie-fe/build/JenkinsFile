@@ -80,7 +80,7 @@ pipeline {
 
         failure {
             script {
-                updateRedminePost('실패', 99)
+                updateRedminePost('실패', null)
             }
         }
     }
