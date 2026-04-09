@@ -80,20 +80,17 @@ pipeline {
         success {
             script {
                 if (env.REDMINE_ISSUE_ID?.trim()) {
-                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-                        writeFile file: 'redmine_success.json', text: """{
-  "issue": {
-    "notes": "[Pipeline] 전체 성공\\n- Job: ${env.JOB_NAME}\\n- Build: #${env.BUILD_NUMBER}\\n- Branch: ${env.GIT_BRANCH}\\n- Version: ${env.APP_VERSION ?: 'unknown'}\\n- URL: ${env.BUILD_URL ?: ''}",
-    "done_ratio": 100
-  }
-}"""
-                        sh '''
-                            curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
-                              -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
-                              -H "Content-Type: application/json" \
-                              --data @redmine_success.json
-                        '''
-                    }
+                    def core = load 'common/core.groovy'
+                    core.updateRedmineIssue(
+                        """[Pipeline] 전체 성공
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                        100
+                    )
                 }
             }
         }
@@ -101,20 +98,17 @@ pipeline {
         failure {
             script {
                 if (env.REDMINE_ISSUE_ID?.trim()) {
-                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-                        writeFile file: 'redmine_failure.json', text: """{
-  "issue": {
-    "notes": "[Pipeline] 전체 실패\\n- Job: ${env.JOB_NAME}\\n- Build: #${env.BUILD_NUMBER}\\n- Branch: ${env.GIT_BRANCH}\\n- Version: ${env.APP_VERSION ?: 'unknown'}\\n- URL: ${env.BUILD_URL ?: ''}",
-    "done_ratio": 99
-  }
-}"""
-                        sh '''
-                            curl -sS -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
-                              -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
-                              -H "Content-Type: application/json" \
-                              --data @redmine_failure.json
-                        '''
-                    }
+                    def core = load 'common/core.groovy'
+                    core.updateRedmineIssue(
+                        """[Pipeline] 전체 실패
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                        99
+                    )
                 }
             }
         }
