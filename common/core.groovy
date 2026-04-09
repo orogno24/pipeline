@@ -198,13 +198,9 @@ def build() {
         runStageWithRedmine('소스코드 빌드', 25, 40) {
             echo("===============[Build] 단계 시작===============")
 
-            if (env.BUILD_TOOL == 'gradle') {
-                gradleBuild()
-            } else if (env.BUILD_TOOL == 'maven') {
-                mavenBuild()
-            } else {
-                error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
-            }
+      
+            error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
+            
 
             echo("===============[Build] 단계 종료===============")
         }
