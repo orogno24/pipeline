@@ -10,14 +10,17 @@ pipeline {
     environment {
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+
         SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
         SONAR_PROJECT_KEY = 'genie-us-fe'
         SONAR_PROJECT_NAME = 'genie-us-fe'
 
+        // ── Git 소스 ─────────────────────────────────────────────────
         GIT_URL = 'http://gitea-http:3000/afterloan/genie-us-fe.git'
         GIT_CREDENTIALS_ID = 'gitea-credentials'
         GIT_BRANCH = 'dev'
 
+        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
         GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
         GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
@@ -26,6 +29,7 @@ pipeline {
         GITOPS_DIR = 'genie-us-fe/overlay/dev'
         GITOPS_CONTAINER_NAME = 'genie-us-fe'
 
+        // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
@@ -34,6 +38,7 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
+        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
     }
 
@@ -80,13 +85,13 @@ pipeline {
 
         failure {
             script {
-                updateRedminePost('실패', null)
+                updateRedminePost('실패')
             }
         }
     }
 }
 
-def updateRedminePost(String resultLabel, int doneRatio) {
+def updateRedminePost(String resultLabel, Integer doneRatio = null) {
     if (!env.REDMINE_ISSUE_ID?.trim()) {
         echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
         return
@@ -101,11 +106,16 @@ def updateRedminePost(String resultLabel, int doneRatio) {
 - URL: ${env.BUILD_URL ?: ''}
 """
 
+        def issueMap = [
+            notes: note
+        ]
+
+        if (doneRatio != null) {
+            issueMap.done_ratio = doneRatio
+        }
+
         def payload = [
-            issue: [
-                notes     : note,
-                done_ratio: doneRatio
-            ]
+            issue: issueMap
         ]
 
         writeFile(
