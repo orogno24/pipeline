@@ -40,12 +40,13 @@ def createRedmineIssue(String status = "START") {
 
         echo "Redmine create response: ${response}"
 
-        def matcher = (response =~ /"issue"\s*:\s*\{\s*"id"\s*:\s*(\d+)/)
-        if (!matcher.find()) {
-            error("Redmine 이슈 생성 실패 - issue id 추출 불가. response=${response}")
+        def parsed = readJSON text: response
+
+        if (!parsed?.issue?.id) {
+            error("Redmine 이슈 생성 실패 - issue id 없음. response=${response}")
         }
 
-        env.REDMINE_ISSUE_ID = matcher.group(1).toString()
+        env.REDMINE_ISSUE_ID = parsed.issue.id.toString()
         echo "Redmine issue created: ${env.REDMINE_ISSUE_ID}"
     }
 }
