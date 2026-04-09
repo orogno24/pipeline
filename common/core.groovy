@@ -168,9 +168,9 @@ def runStageWithRedmine(String stageName, Integer startRatio, Integer successRat
 }
 
 def checkout() {
-    stage('Git Checkout') {
+    stage('Git 체크아웃') {
         try {
-            echo("===============[Git Checkout] 단계 시작===============")
+            echo("===============[Git 체크아웃] 단계 시작===============")
 
             git(
                 url: env.GIT_URL,
@@ -185,7 +185,7 @@ def checkout() {
 
             echo("Checked out branch: ${env.GIT_BRANCH}")
             echo("App Version: ${env.APP_VERSION}")
-            echo("===============[Git Checkout] 단계 종료===============")
+            echo("===============[Git 체크아웃] 단계 종료===============")
         } catch (err) {
             echo("[Git Checkout] 실패: ${err}")
             error("Git 체크아웃 단계에서 오류 발생")
@@ -194,7 +194,7 @@ def checkout() {
 }
 
 def build() {
-    stage('Build') {
+    stage('빌드') {
         runStageWithRedmine('Build', 25, 40) {
             echo("===============[Build] 단계 시작===============")
 
@@ -212,7 +212,7 @@ def build() {
 }
 
 def test() {
-    stage('Test') {
+    stage('테스트') {
         runStageWithRedmine('Test', 45, 55) {
             echo("===============[Test] 단계 시작===============")
 
@@ -230,7 +230,7 @@ def test() {
 }
 
 def gradleTest() {
-    stage('Gradle Test') {
+    stage('Gradle 테스트') {
         echo("===============[Gradle Test] 단계 시작===============")
 
         try {
@@ -256,7 +256,7 @@ def gradleTest() {
 }
 
 def mavenTest() {
-    stage('Maven Test') {
+    stage('Maven 테스트') {
         echo("===============[Maven Test] 단계 시작===============")
 
         try {
@@ -281,7 +281,7 @@ def mavenTest() {
 }
 
 def gradleBuild() {
-    stage('Gradle Build') {
+    stage('Gradle 빌드') {
         echo("===============[Gradle Build] 단계 시작===============")
 
         retry(3) {
@@ -305,7 +305,7 @@ def gradleBuild() {
 }
 
 def mavenBuild() {
-    stage('Maven Build') {
+    stage('Maven 빌드') {
         echo("===============[Maven Build] 단계 시작===============")
 
         retry(3) {
@@ -328,7 +328,7 @@ def mavenBuild() {
 }
 
 def sonarAnalysis() {
-    stage('Sonar Analysis') {
+    stage('소나큐브 분석') {
         markStage('Sonar Analysis', 'START', 60)
         try {
             echo("===============[Sonar Analysis] 단계 시작===============")
@@ -352,7 +352,7 @@ def sonarAnalysis() {
 }
 
 def gradleSonarAnalysis() {
-    stage('Gradle Sonar Analysis') {
+    stage('Gradle 소나큐브 분석') {
         try {
             withSonarQubeEnv('sonarqube') {
                 sh 'chmod +x ./gradlew'
@@ -373,7 +373,7 @@ def gradleSonarAnalysis() {
 }
 
 def mavenSonarAnalysis() {
-    stage('Maven Sonar Analysis') {
+    stage('Maven 소나큐브 분석') {
         try {
             echo("===============[Maven Sonar Analysis] 단계 시작===============")
 
@@ -398,7 +398,7 @@ def mavenSonarAnalysis() {
 }
 
 def sonarAnalysisResult() {
-    stage('Sonar Analysis Result') {
+    stage('소나큐브 분석 결과') {
         markStage('Sonar Analysis Result', 'START', 66)
         try {
             echo("===============[Sonar Analysis Result] 단계 시작===============")
@@ -449,7 +449,7 @@ def sonarAnalysisResult() {
 }
 
 def dockerBuild() {
-    stage('Docker Build') {
+    stage('도커 빌드') {
         runStageWithRedmine('Docker Build', 72, 82) {
             echo("===============[Docker Build] 단계 시작===============")
 
@@ -466,7 +466,7 @@ def dockerBuild() {
 }
 
 def dockerPush() {
-    stage('Docker Push') {
+    stage('도커 푸시') {
         runStageWithRedmine('Docker Push', 83, 90) {
             echo("===============[Docker Push] 단계 시작===============")
 
@@ -490,7 +490,7 @@ def dockerPush() {
 }
 
 def harborImageScan() {
-    stage('Harbor Image Scan') {
+    stage('이미지 검사') {
         markStage('Harbor Image Scan', 'START', 91)
         try {
             echo("===============[Harbor Image Scan] 단계 시작===============")
@@ -585,7 +585,7 @@ def harborImageScan() {
 }
 
 def gitOpsDeploy() {
-    stage('GitOps Deploy') {
+    stage('GitOps 배포') {
         runStageWithRedmine('GitOps Deploy', 95, 100) {
             echo("===============[GitOps Deploy] 단계 시작===============")
 
@@ -725,7 +725,7 @@ def gitOpsDeploy() {
 }
 
 def transferEmptyFileToFtc() {
-    stage('Transfer File To FTC') {
+    stage('FTC 전송') {
         runStageWithRedmine('Transfer File To FTC', 96, 100) {
             echo("===============[Transfer File To FTC] 단계 시작===============")
 
@@ -755,7 +755,7 @@ EOF
 }
 
 def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '', String appName = 'app') {
-    stage('Transfer Source Archive To FTC') {
+    stage('소스코드 FTC 전송') {
         runStageWithRedmine('Transfer Source Archive To FTC', 96, 100) {
             echo("===============[Transfer Source Archive To FTC] 단계 시작===============")
 
