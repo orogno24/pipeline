@@ -56,7 +56,7 @@ pipeline {
         BUILD_CONTEXT = 'source'
 
         // Redmine
-        REDMINE_URL = 'http://redmine-url'
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
         
         SKIP_BUILD = 'false'
     }
