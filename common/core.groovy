@@ -168,7 +168,7 @@ def runStageWithRedmine(String stageName, Integer startRatio, Integer successRat
 }
 
 def checkout() {
-    stage('Git 체크아웃') {
+    stage('소스코드 체크아웃') {
         try {
             echo("===============[Git 체크아웃] 단계 시작===============")
 
@@ -328,7 +328,7 @@ def mavenBuild() {
 }
 
 def sonarAnalysis() {
-    stage('소나큐브 분석') {
+    stage('정적 코드 분석') {
         markStage('Sonar Analysis', 'START', 60)
         try {
             echo("===============[Sonar Analysis] 단계 시작===============")
@@ -352,7 +352,7 @@ def sonarAnalysis() {
 }
 
 def gradleSonarAnalysis() {
-    stage('Gradle 소나큐브 분석') {
+    stage('Gradle 정적 코드 분석') {
         try {
             withSonarQubeEnv('sonarqube') {
                 sh 'chmod +x ./gradlew'
@@ -373,7 +373,7 @@ def gradleSonarAnalysis() {
 }
 
 def mavenSonarAnalysis() {
-    stage('Maven 소나큐브 분석') {
+    stage('Maven 정적 코드 분석') {
         try {
             echo("===============[Maven Sonar Analysis] 단계 시작===============")
 
@@ -449,7 +449,7 @@ def sonarAnalysisResult() {
 }
 
 def dockerBuild() {
-    stage('도커 빌드') {
+    stage('이미지 빌드') {
         runStageWithRedmine('Docker Build', 72, 82) {
             echo("===============[Docker Build] 단계 시작===============")
 
@@ -466,7 +466,7 @@ def dockerBuild() {
 }
 
 def dockerPush() {
-    stage('도커 푸시') {
+    stage('이미지 푸시') {
         runStageWithRedmine('Docker Push', 83, 90) {
             echo("===============[Docker Push] 단계 시작===============")
 
