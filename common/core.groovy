@@ -194,8 +194,8 @@ def checkout() {
 }
 
 def build() {
-    stage('빌드') {
-        runStageWithRedmine('Build', 25, 40) {
+    stage('소스코드 빌드') {
+        runStageWithRedmine('소스코드 빌드', 25, 40) {
             echo("===============[Build] 단계 시작===============")
 
             if (env.BUILD_TOOL == 'gradle') {
@@ -213,7 +213,7 @@ def build() {
 
 def test() {
     stage('테스트') {
-        runStageWithRedmine('Test', 45, 55) {
+        runStageWithRedmine('테스트', 45, 55) {
             echo("===============[Test] 단계 시작===============")
 
             if (env.BUILD_TOOL == 'gradle') {
@@ -450,7 +450,7 @@ def sonarAnalysisResult() {
 
 def dockerBuild() {
     stage('이미지 빌드') {
-        runStageWithRedmine('Docker Build', 72, 82) {
+        runStageWithRedmine('이미지 빌드', 72, 82) {
             echo("===============[Docker Build] 단계 시작===============")
 
             container('docker-dind') {
@@ -467,7 +467,7 @@ def dockerBuild() {
 
 def dockerPush() {
     stage('이미지 푸시') {
-        runStageWithRedmine('Docker Push', 83, 90) {
+        runStageWithRedmine('이미지 푸시', 83, 90) {
             echo("===============[Docker Push] 단계 시작===============")
 
             container('docker-dind') {
@@ -586,7 +586,7 @@ def harborImageScan() {
 
 def gitOpsDeploy() {
     stage('GitOps 배포') {
-        runStageWithRedmine('GitOps Deploy', 95, 100) {
+        runStageWithRedmine('GitOps 배포', 95, 100) {
             echo("===============[GitOps Deploy] 단계 시작===============")
 
             git(
@@ -726,7 +726,7 @@ def gitOpsDeploy() {
 
 def transferEmptyFileToFtc() {
     stage('FTC 전송') {
-        runStageWithRedmine('Transfer File To FTC', 96, 100) {
+        runStageWithRedmine('FTC 전송', 96, 100) {
             echo("===============[Transfer File To FTC] 단계 시작===============")
 
             sh '''
@@ -756,7 +756,7 @@ EOF
 
 def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '', String appName = 'app') {
     stage('소스코드 FTC 전송') {
-        runStageWithRedmine('Transfer Source Archive To FTC', 96, 100) {
+        runStageWithRedmine('소스코드 FTC 전송', 96, 100) {
             echo("===============[Transfer Source Archive To FTC] 단계 시작===============")
 
             sh """
