@@ -453,6 +453,8 @@ def dockerBuild() {
         runStageWithRedmine('이미지 빌드', 72, 82) {
             echo("===============[Docker Build] 단계 시작===============")
 
+            error("지원하지 않는 빌드 도구입니다.")
+
             container('docker-dind') {
                 sh '''
                     docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:$APP_VERSION" .
