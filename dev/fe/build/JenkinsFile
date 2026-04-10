@@ -38,14 +38,14 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
-        // checkout / build path
-        SOURCE_DIR = 'source'
+        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = 'source'
-        
+
+        SOURCE_DIR = 'source'
         SKIP_BUILD = 'false'
 
-        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
-        BUILD_CONTEXT = '.'
+
+
     }
 
     stages {
