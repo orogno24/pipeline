@@ -1,4 +1,4 @@
-def core
+import groovy.json.JsonOutput
 
 pipeline {
     agent {
@@ -7,33 +7,20 @@ pipeline {
         }
     }
 
-    triggers {
-        GenericTrigger(
-            genericVariables: [
-                [key: 'ref', value: '$.ref'],
-                [key: 'after', value: '$.after'],
-                [key: 'before', value: '$.before'],
-                [key: 'repository', value: '$.repository.full_name'],
-                [key: 'pusher', value: '$.pusher.username']
-            ],
-            causeString: 'Triggered on $ref by $pusher',
-            token: 'genie-us-dev-fe-token',
-            printContributedVariables: true,
-            printPostContent: true,
-            regexpFilterText: '$ref',
-            regexpFilterExpression: '^refs/heads/dev$'
-        )
-    }
-    
     environment {
-        BUILD_TOOL = 'docker'
+        BUILD_TOOL = 'gradle'
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
 
-        // Git source
-        GIT_URL = 'http://gitea-http:3000/it-department/genie-us-front.git'
+        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
+        SONAR_PROJECT_KEY = 'genie-us-fe'
+        SONAR_PROJECT_NAME = 'genie-us-fe'
+
+        // ── Git 소스 ─────────────────────────────────────────────────
+        GIT_URL = 'http://gitea-http:3000/afterloan/genie-us-fe.git'
         GIT_CREDENTIALS_ID = 'gitea-credentials'
         GIT_BRANCH = 'dev'
 
-        // GitOps
+        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
         GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
         GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
         GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
@@ -42,7 +29,7 @@ pipeline {
         GITOPS_DIR = 'genie-us-fe/overlay/dev'
         GITOPS_CONTAINER_NAME = 'genie-us-fe'
 
-        // Harbor
+        // ── Harbor 이미지 ─────────────────────────────────────────────
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
@@ -51,158 +38,39 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-fe'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
-        // checkout / build path
-        SOURCE_DIR = 'source'
-        BUILD_CONTEXT = 'source'
-
-        // Redmine
-        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
-        
-        SKIP_BUILD = 'false'
+        // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
+        BUILD_CONTEXT = '.'
     }
 
     stages {
-        stage('Init') {
-            steps {
-                script {
-                    core = load 'common/core.groovy'
-                }
-            }
-        }
-
         stage('Webhook Info') {
             steps {
                 echo "Webhook received"
                 echo "ref = ${env.ref}"
-                echo "before = ${env.before}"
                 echo "after = ${env.after}"
-                echo "repository = ${env.repository}"
-                echo "pusher = ${env.pusher}"
             }
         }
 
-        stage('Checkout') {
+        stage('Load and Run') {
             steps {
-                dir(env.SOURCE_DIR) {
-                    script {
+                script {
+                    def core = load 'common/core.groovy'
+
+                    try {
                         core.checkout()
-                    }
-                }
-            }
-        }
-
-        stage('Create Redmine Issue') {
-            steps {
-                dir(env.SOURCE_DIR) {
-                    script {
                         core.createOrUpdateStartIssue()
-                    }
-                }
-            }
-        }
 
-        stage('Detect Changes') {
-            steps {
-                dir(env.SOURCE_DIR) {
-                    script {
-                        core.markStage('변경 파일 감지', '시작', 21)
-
-                        if (!env.after?.trim() || env.after == 'null') {
-                            echo "Webhook 변수가 없어 변경 파일 감지를 생략합니다. 수동 실행으로 간주합니다."
-                            env.SKIP_BUILD = 'false'
-                            core.updateRedmineIssue(
-                                """[변경 파일 감지] webhook commit 정보 없음
-- 수동 실행으로 간주
-- SKIP_BUILD=false
-""",
-                                23
-                            )
-                            return
+                        dir(env.BUILD_CONTEXT) {
+                            core.dockerBuild()
                         }
 
-                        def changedFiles = ''
+                        core.dockerPush()
+                        core.gitOpsDeploy()
 
-                        if (env.before?.trim() && env.before != 'null' && !env.before.startsWith('0000000')) {
-                            changedFiles = sh(
-                                script: "git diff --name-only ${env.before} ${env.after} || true",
-                                returnStdout: true
-                            ).trim()
-                        } else {
-                            changedFiles = sh(
-                                script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
-                                returnStdout: true
-                            ).trim()
-                        }
-
-                        echo "Changed files:\n${changedFiles}"
-
-                        env.SKIP_BUILD = changedFiles ? 'false' : 'true'
-                        echo "SKIP_BUILD = ${env.SKIP_BUILD}"
-
-                        core.updateRedmineIssue(
-                            """[변경 파일 감지] 성공
-- Changed Files:
-${changedFiles ?: '없음'}
-- SKIP_BUILD: ${env.SKIP_BUILD}
-""",
-                            25
-                        )
+                    } catch (err) {
+                        echo "Pipeline execution failed: ${err}"
+                        throw err
                     }
-                }
-            }
-        }
-
-        stage('Docker Build') {
-            when {
-                expression { env.SKIP_BUILD != 'true' }
-            }
-            steps {
-                dir(env.BUILD_CONTEXT) {
-                    script {
-                        core.dockerBuild()
-                    }
-                }
-            }
-        }
-
-        stage('Docker Push') {
-            when {
-                expression { env.SKIP_BUILD != 'true' }
-            }
-            steps {
-                script {
-                    core.dockerPush()
-                }
-            }
-        }
-
-        stage('GitOps Deploy') {
-            when {
-                expression { env.SKIP_BUILD != 'true' }
-            }
-            steps {
-                script {
-                    core.gitOpsDeploy()
-                }
-            }
-        }
-
-        stage('Skip Info') {
-            when {
-                expression { env.SKIP_BUILD == 'true' }
-            }
-            steps {
-                script {
-                    echo "변경 파일이 없어 프론트 파이프라인을 생략합니다."
-                    core.updateRedmineIssue(
-                        """[Pipeline] 변경 파일 없음
-- 프론트 파이프라인 실행 생략
-- Branch: ${env.GIT_BRANCH}
-- Build: #${env.BUILD_NUMBER}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-                        100
-                    )
                 }
             }
         }
@@ -211,38 +79,69 @@ ${changedFiles ?: '없음'}
     post {
         success {
             script {
-                if (env.REDMINE_ISSUE_ID?.trim() && core != null) {
-                    core.updateRedmineIssue(
-                        """[Pipeline] 전체 성공
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
-""",
-                        100
-                    )
-                }
+                updateRedminePost('성공', 100)
             }
-            echo "프론트 CI/CD 파이프라인 완료"
         }
 
         failure {
             script {
-                if (env.REDMINE_ISSUE_ID?.trim() && core != null) {
-                    core.updateRedmineIssue(
-                        """[Pipeline] 전체 실패
+                updateRedminePost('실패')
+            }
+        }
+    }
+}
+
+def updateRedminePost(String resultLabel, Integer doneRatio = null) {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def note = """[Pipeline] 전체 ${resultLabel}
 - Job: ${env.JOB_NAME}
 - Build: #${env.BUILD_NUMBER}
 - Branch: ${env.GIT_BRANCH}
 - Version: ${env.APP_VERSION ?: 'unknown'}
 - URL: ${env.BUILD_URL ?: ''}
-""",
-                        0
-                    )
-                }
-            }
-            echo "프론트 CI/CD 파이프라인 실패"
+"""
+
+        def issueMap = [
+            notes: note
+        ]
+
+        if (doneRatio != null) {
+            issueMap.done_ratio = doneRatio
+        }
+
+        def payload = [
+            issue: issueMap
+        ]
+
+        writeFile(
+            file: 'redmine_post.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
+            script: '''
+                set +e
+                curl -sS -o redmine_post_response.txt -w "%{http_code}" \
+                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  --data @redmine_post.json
+            ''',
+            returnStdout: true
+        ).trim()
+
+        def responseText = readFile('redmine_post_response.txt').trim()
+        echo "Redmine post target issue: ${env.REDMINE_ISSUE_ID}"
+        echo "Redmine post HTTP code: ${httpCode}"
+        echo "Redmine post response: ${responseText}"
+
+        if (!(httpCode in ['200', '204'])) {
+            error("Redmine post update failed: HTTP ${httpCode}, response=${responseText}")
         }
     }
 }
