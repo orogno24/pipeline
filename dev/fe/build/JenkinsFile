@@ -43,9 +43,6 @@ pipeline {
 
         SOURCE_DIR = 'source'
         SKIP_BUILD = 'false'
-
-
-
     }
 
     stages {
