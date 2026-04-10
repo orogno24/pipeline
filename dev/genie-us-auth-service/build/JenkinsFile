@@ -5,7 +5,7 @@ def core
 pipeline {
     agent {
         kubernetes {
-            label 'dind-gradle'
+            label 'dind'
         }
     }
 
@@ -144,14 +144,12 @@ ${changedFiles ?: '없음'}
                         }
 
                         // 1. 빌드 및 품질 분석 (Gradle 환경)
-                        container('gradle') {
-                            dir(env.BUILD_CONTEXT) {
-                                core.build()
-                                core.sonarAnalysis()
-                                core.sonarAnalysisResult()
-                            }
+                        dir(env.BUILD_CONTEXT) {
+                            core.build()
+                            core.sonarAnalysis()
+                            core.sonarAnalysisResult()
                         }
-
+                        
                         // 2. 도커 이미지 빌드 및 푸시
                         dir(env.BUILD_CONTEXT) {
                             core.dockerBuild()
