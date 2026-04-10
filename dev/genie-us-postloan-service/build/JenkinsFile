@@ -40,15 +40,15 @@ pipeline {
         GITOPS_CREDENTIALS_ID = 'gitea-credentials'
         GITOPS_BRANCH = 'main'
         GITOPS_DIR = 'genie-us-postloan-service/overlay/dev'
-        GITOPS_CONTAINER_NAME = 'genie-us-postloan'
+        GITOPS_CONTAINER_NAME = 'genie-us-postloan-service'
 
         // Harbor
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
-        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-postloan'
-        DOCKER_REPO_NAME = 'genie-us-postloan'
-        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-postloan'
+        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-postloan-service'
+        DOCKER_REPO_NAME = 'genie-us-postloan-service'
+        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-postloan-service'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
         // checkout / build path
