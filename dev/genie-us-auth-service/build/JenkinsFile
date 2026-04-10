@@ -17,7 +17,7 @@ pipeline {
                 [key: 'pusher', value: '$.pusher.username']
             ],
             causeString: 'Triggered on $ref by $pusher',
-            token: 'genie-us-dev-au-token',
+            token: 'genie-us-dev-fe-token',
             printContributedVariables: true,
             printPostContent: true,
             regexpFilterText: '$ref',
@@ -39,22 +39,25 @@ pipeline {
         GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
         GITOPS_CREDENTIALS_ID = 'gitea-credentials'
         GITOPS_BRANCH = 'main'
-        GITOPS_DIR = 'genie-us-au/overlay/dev'
-        GITOPS_CONTAINER_NAME = 'genie-us-au'
+        GITOPS_DIR = 'genie-us-auth-service/overlay/dev'
+        GITOPS_CONTAINER_NAME = 'genie-us-auth'
 
         // Harbor
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
-        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-au'
-        DOCKER_REPO_NAME = 'genie-us-au'
-        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-au'
+        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-auth'
+        DOCKER_REPO_NAME = 'genie-us-auth'
+        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-auth'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
         // checkout / build path
         SOURCE_DIR = 'source'
         BUILD_CONTEXT = 'source'
 
+        // Redmine
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+        
         SKIP_BUILD = 'false'
     }
 
@@ -88,13 +91,32 @@ pipeline {
             }
         }
 
+        stage('Create Redmine Issue') {
+            steps {
+                dir(env.SOURCE_DIR) {
+                    script {
+                        core.createOrUpdateStartIssue()
+                    }
+                }
+            }
+        }
+
         stage('Detect Changes') {
             steps {
                 dir(env.SOURCE_DIR) {
                     script {
+                        core.markStage('변경 파일 감지', '시작', 21)
+
                         if (!env.after?.trim() || env.after == 'null') {
                             echo "Webhook 변수가 없어 변경 파일 감지를 생략합니다. 수동 실행으로 간주합니다."
                             env.SKIP_BUILD = 'false'
+                            core.updateRedmineIssue(
+                                """[변경 파일 감지] webhook commit 정보 없음
+- 수동 실행으로 간주
+- SKIP_BUILD=false
+""",
+                                23
+                            )
                             return
                         }
 
@@ -116,6 +138,15 @@ pipeline {
 
                         env.SKIP_BUILD = changedFiles ? 'false' : 'true'
                         echo "SKIP_BUILD = ${env.SKIP_BUILD}"
+
+                        core.updateRedmineIssue(
+                            """[변경 파일 감지] 성공
+- Changed Files:
+${changedFiles ?: '없음'}
+- SKIP_BUILD: ${env.SKIP_BUILD}
+""",
+                            25
+                        )
                     }
                 }
             }
@@ -126,11 +157,9 @@ pipeline {
                 expression { env.SKIP_BUILD != 'true' }
             }
             steps {
-                container('docker-dind') {
-                    dir(env.BUILD_CONTEXT) {
-                        script {
-                            core.dockerBuild()
-                        }
+                dir(env.BUILD_CONTEXT) {
+                    script {
+                        core.dockerBuild()
                     }
                 }
             }
@@ -141,10 +170,8 @@ pipeline {
                 expression { env.SKIP_BUILD != 'true' }
             }
             steps {
-                container('docker-dind') {
-                    script {
-                        core.dockerPush()
-                    }
+                script {
+                    core.dockerPush()
                 }
             }
         }
@@ -165,17 +192,57 @@ pipeline {
                 expression { env.SKIP_BUILD == 'true' }
             }
             steps {
-                echo "변경 파일이 없어 백엔드 파이프라인을 생략합니다."
+                script {
+                    echo "변경 파일이 없어 프론트 파이프라인을 생략합니다."
+                    core.updateRedmineIssue(
+                        """[Pipeline] 변경 파일 없음
+- 프론트 파이프라인 실행 생략
+- Branch: ${env.GIT_BRANCH}
+- Build: #${env.BUILD_NUMBER}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                        100
+                    )
+                }
             }
         }
     }
 
     post {
         success {
-            echo "백엔드 CI/CD 파이프라인 완료"
+            script {
+                if (env.REDMINE_ISSUE_ID?.trim() && core != null) {
+                    core.updateRedmineIssue(
+                        """[Pipeline] 전체 성공
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                        100
+                    )
+                }
+            }
+            echo "프론트 CI/CD 파이프라인 완료"
         }
+
         failure {
-            echo "백엔드 CI/CD 파이프라인 실패"
+            script {
+                if (env.REDMINE_ISSUE_ID?.trim() && core != null) {
+                    core.updateRedmineIssue(
+                        """[Pipeline] 전체 실패
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                        0
+                    )
+                }
+            }
+            echo "프론트 CI/CD 파이프라인 실패"
         }
     }
 }
