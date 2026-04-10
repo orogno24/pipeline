@@ -7,24 +7,6 @@ pipeline {
         }
     }
 
-    triggers {
-        GenericTrigger(
-            genericVariables: [
-                [key: 'ref', value: '$.ref'],
-                [key: 'after', value: '$.after'],
-                [key: 'before', value: '$.before'],
-                [key: 'repository', value: '$.repository.full_name'],
-                [key: 'pusher', value: '$.pusher.username']
-            ],
-            causeString: 'Triggered on $ref by $pusher',
-            token: 'genie-us-dev-fe-token',
-            printContributedVariables: true,
-            printPostContent: true,
-            regexpFilterText: '$ref',
-            regexpFilterExpression: '^refs/heads/dev$'
-        )
-    }
-
     environment {
         BUILD_TOOL = 'docker'
 
