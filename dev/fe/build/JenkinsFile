@@ -39,7 +39,7 @@ pipeline {
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
-        BUILD_CONTEXT = 'source'
+        BUILD_CONTEXT = '.'
 
         SOURCE_DIR = 'source'
         SKIP_BUILD = 'false'
