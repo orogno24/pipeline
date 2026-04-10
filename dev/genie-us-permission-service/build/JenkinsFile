@@ -152,13 +152,11 @@ ${changedFiles ?: '없음'}
                             }
                         }
 
-                        // 2. 도커 이미지 빌드 및 푸시 (Docker-in-Docker 환경)
-                        container('docker-dind') {
-                            dir(env.BUILD_CONTEXT) {
-                                core.dockerBuild()
-                            }
-                            core.dockerPush()
+                        // 2. 도커 이미지 빌드 및 푸시
+                        dir(env.BUILD_CONTEXT) {
+                            core.dockerBuild()
                         }
+                        core.dockerPush()
 
                         // 3. GitOps 배포 설정 업데이트
                         core.gitOpsDeploy()
@@ -187,6 +185,9 @@ ${changedFiles ?: '없음'}
     }
 }
 
+/**
+ * Redmine 이슈 상태를 업데이트하는 공통 함수
+ */
 def updateRedminePost(String resultLabel, Integer doneRatio = null) {
     if (!env.REDMINE_ISSUE_ID?.trim()) {
         echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
