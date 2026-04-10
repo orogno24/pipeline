@@ -5,7 +5,7 @@ def core
 pipeline {
     agent {
         kubernetes {
-            label 'dind-gradle'
+            label 'dind'
         }
     }
 
