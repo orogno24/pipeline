@@ -18,13 +18,12 @@ pipeline {
         )
     }
 
-
     environment {
-        APP_NAME = 'genie-us-front'
-        GIT_BRANCH_NAME = 'main'
-        GITEA_OWNER = 'it-department'
+        APP_NAME         = 'genie-us-front'
+        GIT_BRANCH_NAME  = 'main'
+        GITEA_OWNER      = 'it-department'
         REDMINE_API_BASE = 'http://redmine.cicd.svc.cluster.local'
-        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+        REDMINE_URL      = 'http://redmine.cicd.svc.cluster.local'
     }
 
     stages {
@@ -40,12 +39,9 @@ pipeline {
         stage('Redmine 이슈 ID 파싱') {
             steps {
                 script {
-                    def matcher = env.COMMIT_MESSAGE =~ /\(#(\d+)\)/
-                    if (matcher.find()) {
-                        def prNumber = matcher.group(1)
+                    def prNumber = extractPrNumber(env.COMMIT_MESSAGE)
+                    if (prNumber) {
                         echo "PR 번호: ${prNumber}"
-
-                        // PR 번호로 Redmine 이슈 검색
                         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
                             def response = httpRequest(
                                 httpMode: 'GET',
@@ -60,6 +56,8 @@ pipeline {
                                 echo "Redmine 이슈 못 찾음"
                             }
                         }
+                    } else {
+                        echo "PR 번호 파싱 실패"
                     }
                 }
             }
@@ -117,4 +115,10 @@ pipeline {
             }
         }
     }
+}
+
+@NonCPS
+def extractPrNumber(String msg) {
+    def matcher = msg =~ /\(#(\d+)\)/
+    return matcher.find() ? matcher.group(1) : null
 }
