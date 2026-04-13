@@ -23,6 +23,7 @@ pipeline {
         APP_NAME = 'genie-us-front'
         GIT_BRANCH_NAME = 'main'
         GITEA_OWNER = 'it-department'
+        REDMINE_API_BASE = 'http://redmine.cicd.svc.cluster.local'
     }
 
     stages {
@@ -32,6 +33,20 @@ pipeline {
                 echo "ref = ${env.ref}"
                 echo "after = ${env.after}"
                 echo "APP_NAME = ${env.APP_NAME}"
+            }
+        }
+
+        stage('Redmine 이슈 ID 파싱') {
+            steps {
+                script {
+                    def matcher = env.COMMIT_MESSAGE =~ /\(#(\d+)\)/
+                    if (matcher.find()) {
+                        env.REDMINE_ISSUE_ID = matcher.group(1)
+                        echo "Redmine Issue ID: ${env.REDMINE_ISSUE_ID}"
+                    } else {
+                        echo "Redmine 이슈 ID 파싱 실패 - Redmine 업데이트 생략"
+                    }
+                }
             }
         }
 
