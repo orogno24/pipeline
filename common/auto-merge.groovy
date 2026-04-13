@@ -156,28 +156,31 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
-                        def status = env.MERGE_RESULT == 'SUCCESS' ? env.MERGED_STATUS_ID : env.MERGE_FAIL_STATUS_ID
-
-                        httpRequest(
-                            httpMode: 'PUT',
-                            url: "${env.REDMINE_API_BASE}/issues/${env.ISSUE_ID}.json",
-                            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
-                            contentType: 'APPLICATION_JSON',
-                            requestBody: """
-                            {
-                              "issue": {
-                                "status_id": ${status},
-                                "notes": "Jenkins merge 결과: ${env.MERGE_RESULT}"
-                              }
-                            }
-                            """
-                        )
+                        if (env.MERGE_RESULT == 'FAIL') {
+                            httpRequest(
+                                httpMode: 'PUT',
+                                url: "${env.REDMINE_API_BASE}/issues/${env.ISSUE_ID}.json",
+                                customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
+                                contentType: 'APPLICATION_JSON',
+                                requestBody: """
+                                {
+                                  "issue": {
+                                    "status_id": ${env.MERGE_FAIL_STATUS_ID},
+                                    "notes": "Jenkins merge 실패"
+                                  }
+                                }
+                                """
+                            )
+                        } else {
+                            echo "Merge 성공 → 전송중 유지, FTC 전송 파이프라인에서 최종 상태 결정"
+                        }
                     }
                 }
             }
         }
     }
 }
+
 
 @NonCPS
 def extractRepoName(String desc) {
