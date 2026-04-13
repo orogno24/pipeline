@@ -42,10 +42,24 @@ pipeline {
                 script {
                     def matcher = env.COMMIT_MESSAGE =~ /\(#(\d+)\)/
                     if (matcher.find()) {
-                        env.REDMINE_ISSUE_ID = matcher.group(1)
-                        echo "Redmine Issue ID: ${env.REDMINE_ISSUE_ID}"
-                    } else {
-                        echo "Redmine 이슈 ID 파싱 실패 - Redmine 업데이트 생략"
+                        def prNumber = matcher.group(1)
+                        echo "PR 번호: ${prNumber}"
+
+                        // PR 번호로 Redmine 이슈 검색
+                        withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
+                            def response = httpRequest(
+                                httpMode: 'GET',
+                                url: "http://redmine.cicd.svc.cluster.local/issues.json?cf_1=${prNumber}&tracker_id=4&status_id=9",
+                                customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]]
+                            )
+                            def json = readJSON text: response.content
+                            if (json.issues?.size() > 0) {
+                                env.REDMINE_ISSUE_ID = json.issues[0].id.toString()
+                                echo "Redmine Issue ID: ${env.REDMINE_ISSUE_ID}"
+                            } else {
+                                echo "Redmine 이슈 못 찾음"
+                            }
+                        }
                     }
                 }
             }
