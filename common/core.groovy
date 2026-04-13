@@ -37,6 +37,7 @@ def createRedmineIssue(String status = "시작") {
                 tracker_id : 4,   
                 subject    : subject,
                 description: description,
+                status_id  : 13,  //개발배포중으로 이슈 생성
                 done_ratio : 0
             ]
         ]
