@@ -173,13 +173,13 @@ ${changedFiles ?: '없음'}
     post {
         success {
             script {
-                updateRedminePost('성공', 100, 5)
+                updateRedminePost('성공', 100, 14)
             }
         }
 
         failure {
             script {
-                updateRedminePost('실패')
+                updateRedminePost('실패', null, 15)
             }
         }
     }
