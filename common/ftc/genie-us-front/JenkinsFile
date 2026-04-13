@@ -5,6 +5,20 @@ pipeline {
         }
     }
 
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'ref',            value: '$.ref'],
+                [key: 'after',          value: '$.after'],
+                [key: 'COMMIT_MESSAGE', value: '$.commits[0].message']
+            ],
+            token: 'ftc-transfer-token',
+            regexpFilterText: '$ref',
+            regexpFilterExpression: 'refs/heads/main'
+        )
+    }
+
+
     environment {
         APP_NAME = 'genie-us-front'
         GIT_BRANCH_NAME = 'main'
@@ -36,6 +50,39 @@ pipeline {
                 script {
                     def core = load 'common/core.groovy'
                     core.transferSourceArchiveToFtc('source', env.GITEA_OWNER, env.APP_NAME)
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                if (env.REDMINE_ISSUE_ID?.trim()) {
+                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
+                        httpRequest(
+                            httpMode: 'PUT',
+                            url: "${env.REDMINE_API_BASE}/issues/${env.REDMINE_ISSUE_ID}.json",
+                            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
+                            contentType: 'APPLICATION_JSON',
+                            requestBody: '{"issue": {"status_id": 10, "notes": "FTC 전송 완료"}}'
+                        )
+                    }
+                }
+            }
+        }
+        failure {
+            script {
+                if (env.REDMINE_ISSUE_ID?.trim()) {
+                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
+                        httpRequest(
+                            httpMode: 'PUT',
+                            url: "${env.REDMINE_API_BASE}/issues/${env.REDMINE_ISSUE_ID}.json",
+                            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
+                            contentType: 'APPLICATION_JSON',
+                            requestBody: '{"issue": {"status_id": 12, "notes": "FTC 전송 실패"}}'
+                        )
+                    }
                 }
             }
         }
