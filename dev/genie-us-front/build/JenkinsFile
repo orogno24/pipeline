@@ -162,7 +162,7 @@ ${changedFiles ?: '없음'}
     post {
         success {
             script {
-                updateRedminePost('성공', 100)
+                updateRedminePost('성공', 100, 5)
             }
         }
 
@@ -174,7 +174,7 @@ ${changedFiles ?: '없음'}
     }
 }
 
-def updateRedminePost(String resultLabel, Integer doneRatio = null) {
+def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer statusId = null) {
     if (!env.REDMINE_ISSUE_ID?.trim()) {
         echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
         return
@@ -196,6 +196,10 @@ def updateRedminePost(String resultLabel, Integer doneRatio = null) {
 
         if (doneRatio != null) {
             issueMap.done_ratio = doneRatio
+        }
+
+        if (statusId != null) {
+            issueMap.status_id = statusId
         }
 
         def payload = [
