@@ -24,6 +24,7 @@ pipeline {
         GIT_BRANCH_NAME = 'main'
         GITEA_OWNER = 'it-department'
         REDMINE_API_BASE = 'http://redmine.cicd.svc.cluster.local'
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
     }
 
     stages {
