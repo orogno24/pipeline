@@ -46,7 +46,7 @@ def createRedmineIssue(String status = "시작") {
                 tracker_id : (env.REDMINE_PIPELINE_TRACKER_ID ?: "4"),
                 subject    : subject,
                 description: description,
-                status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "1"),
+                status_id  : 13,  //개발배포중으로 이슈 생성
                 done_ratio : 0
             ]
         ]
@@ -714,7 +714,6 @@ def createImageTransferIssue() {
         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
             def redmineProjectId = env.REDMINE_TRANSFER_PROJECT_ID?.trim() ?: env.REDMINE_PIPELINE_PROJECT_ID?.trim()
             def redmineTrackerId = env.REDMINE_TRANSFER_TRACKER_ID?.trim() ?: env.REDMINE_PIPELINE_TRACKER_ID?.trim() ?: "4"
-            def redmineStatusId  = env.REDMINE_TRANSFER_STATUS_ID_REQUESTED?.trim() ?: "1"
 
             if (!redmineProjectId) {
                 error("REDMINE_TRANSFER_PROJECT_ID 또는 REDMINE_PIPELINE_PROJECT_ID 값이 없습니다.")
@@ -738,7 +737,7 @@ def createImageTransferIssue() {
                     tracker_id : redmineTrackerId,
                     subject    : subject,
                     description: description,
-                    status_id  : redmineStatusId,
+                    status_id  : 13,  //개발배포중으로 이슈 생성
                     done_ratio : 0
                 ]
             ]
@@ -971,47 +970,6 @@ def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer stat
             error("Redmine post update failed: HTTP ${httpCode}, response=${responseText}")
         }
     }
-}
-
-/**
- * Redmine 이슈를 읽어와 이관에 필요한 정보들을 환경 변수에 로드하는 함수
- */
-def loadTransferIssueFromRedmine(String issueId) {
-    def parsed = readRedmineIssue(issueId)
-    def issue = parsed?.issue
-
-    if (!issue) {
-        error("Redmine issue 정보가 없습니다. issueId=${issueId}")
-    }
-
-    env.REDMINE_TRANSFER_ISSUE_ID = issue.id?.toString() ?: issueId
-    env.REDMINE_TRANSFER_SUBJECT = issue.subject?.toString() ?: ''
-    env.REDMINE_TRANSFER_DESCRIPTION = issue.description?.toString() ?: ''
-    env.REDMINE_TRANSFER_STATUS_NAME = issue.status?.name?.toString() ?: ''
-    env.REDMINE_TRANSFER_STATUS_ID = issue.status?.id?.toString() ?: ''
-
-    def req = parseTransferRequest(env.REDMINE_TRANSFER_DESCRIPTION)
-
-    env.TRANSFER_REQUEST_TYPE = req.REQUEST_TYPE ?: ''
-    env.TRANSFER_SOURCE_REGISTRY = req.SOURCE_REGISTRY ?: ''
-    env.TRANSFER_SOURCE_IMAGE = req.SOURCE_IMAGE ?: ''
-    env.TRANSFER_SOURCE_REPOSITORY = req.SOURCE_REPOSITORY ?: ''
-    env.TRANSFER_TARGET_REGISTRY = req.TARGET_REGISTRY ?: ''
-    env.TRANSFER_TARGET_IMAGE = req.TARGET_IMAGE ?: ''
-    env.TRANSFER_TARGET_REPOSITORY = req.TARGET_REPOSITORY ?: ''
-    env.TRANSFER_IMAGE_TAG = req.IMAGE_TAG ?: ''
-    env.TRANSFER_SERVICE_NAME = req.SERVICE_NAME ?: ''
-    env.TRANSFER_GIT_BRANCH = req.GIT_BRANCH ?: ''
-    env.TRANSFER_GITOPS_PR_NUMBER = req.GITOPS_PR_NUMBER ?: ''
-    env.TRANSFER_ORIGIN_PIPELINE_ISSUE_ID = req.ORIGIN_PIPELINE_ISSUE_ID ?: ''
-    env.TRANSFER_ORIGIN_JOB_NAME = req.ORIGIN_JOB_NAME ?: ''
-    env.TRANSFER_ORIGIN_BUILD_NUMBER = req.ORIGIN_BUILD_NUMBER ?: ''
-    env.TRANSFER_ORIGIN_BUILD_URL = req.ORIGIN_BUILD_URL ?: ''
-
-    echo "Transfer issue loaded: ${env.REDMINE_TRANSFER_ISSUE_ID}"
-    echo "TRANSFER_SOURCE_IMAGE=${env.TRANSFER_SOURCE_IMAGE}"
-    echo "TRANSFER_TARGET_IMAGE=${env.TRANSFER_TARGET_IMAGE}"
-    echo "TRANSFER_IMAGE_TAG=${env.TRANSFER_IMAGE_TAG}"
 }
 
 /**
