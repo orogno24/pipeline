@@ -8,6 +8,7 @@ pipeline {
     }
 
     environment {
+        /*
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
 
@@ -40,6 +41,11 @@ pipeline {
 
         // ── 모노레포 내 빌드 경로 ─────────────────────────────────────
         BUILD_CONTEXT = '.'
+        */
+        APP_NAME     = 'genie-us-front'
+        BUILD_TOOL   = 'gradle'
+        REDMINE_URL  = 'http://redmine.cicd.svc.cluster.local'
+        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
     }
 
     stages {
@@ -55,7 +61,7 @@ pipeline {
             steps {
                 script {
                     def core = load 'common/core.groovy'
-
+                    core.initEnv()
                     try {
                         core.checkout()
                         core.createOrUpdateStartIssue()
