@@ -40,7 +40,7 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-front'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
-        // ── Target Harbor 이미지 (이관 대상) ──────────────────────────
+        // ── Target Harbor 이미지 (운영환경 이관 대상) ──────────────────────────
         TARGET_DOCKER_REGISTRY_URL = 'harbor-prod.jtchinae-bank.co.kr'
         TARGET_DOCKER_PROJECT_NAME = 'jtcsb'
         TARGET_DOCKER_IMAGE_NAME = 'jtcsb/genie-us-front'
