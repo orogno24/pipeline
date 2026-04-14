@@ -711,23 +711,13 @@ def gitOpsDeploy() {
  */
 def createImageTransferIssue() {
     stage('이미지 이관 요청 생성') {
-        updateRedmineIssue(
-            """[이미지 이관 요청] 생성 시작
-- Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- GitOps PR: ${env.GITOPS_PR_NUMBER ?: '없음'}
-""",
-            100
-        )
-
         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
             def subject = "[이미지 이관 요청] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${env.APP_VERSION}"
 
-            // 이관 처리에 필요한 메타데이터를 [REQUEST_INFO] 블록에 포함하여 설명문 작성
             def description = """이미지 이관 요청
 
-아래 정보는 Jenkins가 자동 생성했습니다.
-관리자가 상태를 승인 상태로 변경하면 별도 Jenkins Job이 실행되어 이미지를 다른 Harbor로 이관합니다.
+관리자가 이 일감의 상태를 '배포승인(12)' 으로 변경하면
+별도 Jenkins Job 이 실행되어 다른 Harbor 로 이미지를 이관합니다.
 
 [REQUEST_INFO]
 REQUEST_TYPE=IMAGE_TRANSFER
@@ -748,20 +738,18 @@ ORIGIN_BUILD_URL=${env.BUILD_URL ?: ''}
 [/REQUEST_INFO]
 
 요약
-- Source Harbor: ${env.DOCKER_REGISTRY_URL}
 - Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- Target Harbor: ${env.TARGET_DOCKER_REGISTRY_URL}
 - Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
 - GitOps PR: ${env.GITOPS_PR_NUMBER ?: '없음'}
 """
 
             def payload = [
                 issue: [
-                    project_id : env.REDMINE_TRANSFER_PROJECT_ID ?: "jt-genie-lam",
-                    tracker_id : env.REDMINE_TRANSFER_TRACKER_ID ?: "5",
+                    project_id : env.REDMINE_TRANSFER_PROJECT_ID,
+                    tracker_id : env.REDMINE_TRANSFER_TRACKER_ID,
                     subject    : subject,
                     description: description,
-                    status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "1"),
+                    status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "11") as Integer,
                     done_ratio : 0
                 ]
             ]
@@ -791,29 +779,15 @@ ORIGIN_BUILD_URL=${env.BUILD_URL ?: ''}
                 error("Redmine transfer 이슈 생성 실패: HTTP ${httpCode}, response=${responseText}")
             }
 
-            def parsed
-            try {
-                parsed = new JsonSlurperClassic().parseText(responseText)
-            } catch (err) {
-                error("Redmine transfer create 응답 JSON 파싱 실패: ${err}\nresponse=${responseText}")
-            }
-
+            def parsed = new groovy.json.JsonSlurperClassic().parseText(responseText)
             def issueId = parsed?.issue?.id?.toString()
+
             if (!issueId) {
-                error("Redmine transfer 이슈 생성 실패: issue.id를 찾지 못했습니다. response=${responseText}")
+                error("Redmine transfer 이슈 생성 실패: issue.id 없음")
             }
 
             env.REDMINE_TRANSFER_ISSUE_ID = issueId
             echo "Redmine transfer issue created: ${env.REDMINE_TRANSFER_ISSUE_ID}"
-
-            updateRedmineIssue(
-                """[이미지 이관 요청] 생성 완료
-- Transfer Issue ID: ${env.REDMINE_TRANSFER_ISSUE_ID}
-- Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
-""",
-                100
-            )
         }
     }
 }
@@ -1061,3 +1035,291 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
 }
 
 return this
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import groovy.json.JsonOutput
+
+def core
+
+pipeline {
+    agent {
+        kubernetes {
+            label 'dind'
+        }
+    }
+
+    environment {
+        BUILD_TOOL = 'gradle'
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+
+        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
+        SONAR_PROJECT_KEY = 'genie-us-front'
+        SONAR_PROJECT_NAME = 'genie-us-front'
+
+        // ── Git 소스 ─────────────────────────────────────────────────
+        GIT_URL = 'http://gitea-http:3000/it-department/genie-us-front.git'
+        GIT_CREDENTIALS_ID = 'gitea-credentials'
+        GIT_BRANCH = 'dev'
+
+        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
+        GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
+        GITOPS_CREDENTIALS_ID = 'gitea-credentials'
+        GITOPS_BRANCH = 'main'
+        GITOPS_DIR = 'genie-us-front/overlay/dev'
+        GITOPS_CONTAINER_NAME = 'genie-us-front'
+
+        // ── Source Harbor 이미지 ─────────────────────────────────────
+        DOCKER_REGISTRY_URL = 'harbor-core:80'
+        DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
+        DOCKER_PROJECT_NAME = 'jtcsb'
+        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-front'
+        DOCKER_REPO_NAME = 'genie-us-front'
+        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-front'
+        DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
+
+        // ── Target Harbor 이미지 (이관 대상) ──────────────────────────
+        TARGET_DOCKER_REGISTRY_URL = 'harbor-prod.jtchinae-bank.co.kr'
+        TARGET_DOCKER_PROJECT_NAME = 'jtcsb'
+        TARGET_DOCKER_IMAGE_NAME = 'jtcsb/genie-us-front'
+        TARGET_DOCKER_IMAGE_URL = 'harbor-prod.jtchinae-bank.co.kr/jtcsb/genie-us-front'
+        TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
+
+        // ── Redmine tracker / status (예시값, 실제 ID로 교체 필요) ─────
+        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_PIPELINE_TRACKER_ID = '4'
+
+        REDMINE_TRANSFER_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_TRANSFER_TRACKER_ID = '5'
+
+        // 시험망 일감 상태 기준
+        REDMINE_TRANSFER_STATUS_ID_REQUESTED = '11'    // 배포요청
+        REDMINE_TRANSFER_STATUS_ID_APPROVED = '12'     // 배포승인
+        REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS = '13'  // 배포 중
+        REDMINE_TRANSFER_STATUS_ID_DONE = '14'         // 배포완료
+        REDMINE_TRANSFER_STATUS_ID_FAILED = '15'       // 배포실패
+
+        // ── 빌드 경로 ────────────────────────────────────────────────
+        BUILD_CONTEXT = '.'
+        SOURCE_DIR = '.'
+
+        SKIP_BUILD = 'false'
+        GITOPS_PR_NUMBER = ''
+        REDMINE_TRANSFER_ISSUE_ID = ''
+    }
+
+    stages {
+        stage('Init') {
+            steps {
+                script {
+                    core = load 'common/core.groovy'
+                }
+            }
+        }
+
+        stage('Webhook Info') {
+            steps {
+                echo "Webhook received"
+                echo "ref = ${env.ref}"
+                echo "before = ${env.before}"
+                echo "after = ${env.after}"
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    core.checkout()
+                    core.createOrUpdateStartIssue()
+                }
+            }
+        }
+
+        stage('Detect Changes') {
+            steps {
+                dir(env.SOURCE_DIR) {
+                    script {
+                        core.markStage('변경 파일 감지', '시작', 21)
+
+                        if (!env.after?.trim() || env.after == 'null') {
+                            echo "Webhook 변수가 없어 변경 파일 감지를 생략합니다. 수동 실행으로 간주합니다."
+                            env.SKIP_BUILD = 'false'
+                            core.updateRedmineIssue(
+                                """[변경 파일 감지] webhook commit 정보 없음
+- 수동 실행으로 간주
+- SKIP_BUILD=false
+""",
+                                23
+                            )
+                            return
+                        }
+
+                        def changedFiles = ''
+
+                        if (env.before?.trim() && env.before != 'null' && !env.before.startsWith('0000000')) {
+                            changedFiles = sh(
+                                script: "git diff --name-only ${env.before} ${env.after} || true",
+                                returnStdout: true
+                            ).trim()
+                        } else {
+                            changedFiles = sh(
+                                script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
+                                returnStdout: true
+                            ).trim()
+                        }
+
+                        echo "Changed files:\n${changedFiles}"
+
+                        env.SKIP_BUILD = changedFiles ? 'false' : 'true'
+                        echo "SKIP_BUILD = ${env.SKIP_BUILD}"
+
+                        core.updateRedmineIssue(
+                            """[변경 파일 감지] 성공
+- Changed Files:
+${changedFiles ?: '없음'}
+- SKIP_BUILD: ${env.SKIP_BUILD}
+""",
+                            25
+                        )
+                    }
+                }
+            }
+        }
+
+        stage('Load and Run') {
+            steps {
+                script {
+                    try {
+                        if (env.SKIP_BUILD == 'true') {
+                            echo "변경 파일이 없어 build/push/deploy를 생략합니다."
+                            core.updateRedmineIssue(
+                                """[Pipeline] 변경 파일 없음
+- build/push/deploy 생략
+- Branch: ${env.GIT_BRANCH}
+- Build: #${env.BUILD_NUMBER}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                                100
+                            )
+                            return
+                        }
+
+                        dir(env.BUILD_CONTEXT) {
+                            core.dockerBuild()
+                        }
+
+                        core.dockerPush()
+                        core.gitOpsDeploy()
+                        core.createImageTransferIssue()
+
+                    } catch (err) {
+                        echo "Pipeline execution failed: ${err}"
+                        throw err
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                updateRedminePost('성공', 100, 14)
+            }
+        }
+
+        failure {
+            script {
+                updateRedminePost('실패', null, 15)
+            }
+        }
+    }
+}
+
+def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer statusId = null) {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def note = """[Pipeline] 전체 ${resultLabel}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+- SKIP_BUILD: ${env.SKIP_BUILD ?: 'false'}
+- GITOPS_PR_NUMBER: ${env.GITOPS_PR_NUMBER ?: ''}
+- TRANSFER_ISSUE_ID: ${env.REDMINE_TRANSFER_ISSUE_ID ?: ''}
+"""
+
+        def issueMap = [
+            notes: note
+        ]
+
+        if (doneRatio != null) {
+            issueMap.done_ratio = doneRatio
+        }
+
+        if (statusId != null) {
+            issueMap.status_id = statusId
+        }
+
+        def payload = [
+            issue: issueMap
+        ]
+
+        writeFile(
+            file: 'redmine_post.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
+            script: '''
+                set +e
+                curl -sS -o redmine_post_response.txt -w "%{http_code}" \
+                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  --data @redmine_post.json
+            ''',
+            returnStdout: true
+        ).trim()
+
+        def responseText = readFile('redmine_post_response.txt').trim()
+        echo "Redmine post target issue: ${env.REDMINE_ISSUE_ID}"
+        echo "Redmine post HTTP code: ${httpCode}"
+        echo "Redmine post response: ${responseText}"
+
+        if (!(httpCode in ['200', '204'])) {
+            error("Redmine post update failed: HTTP ${httpCode}, response=${responseText}")
+        }
+    }
+}
