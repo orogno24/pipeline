@@ -54,11 +54,12 @@ pipeline {
         REDMINE_TRANSFER_PROJECT_ID = 'jt-genie-lam'
         REDMINE_TRANSFER_TRACKER_ID = '5'
 
-        REDMINE_TRANSFER_STATUS_ID_REQUESTED = '1'    // 이관요청
-        REDMINE_TRANSFER_STATUS_ID_APPROVED = '2'     // 관리자 승인
-        REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS = '3'  // 이관중
-        REDMINE_TRANSFER_STATUS_ID_DONE = '4'         // 이관완료
-        REDMINE_TRANSFER_STATUS_ID_FAILED = '5'       // 이관실패
+        // 시험망 일감 상태 기준
+        REDMINE_TRANSFER_STATUS_ID_REQUESTED = '11'    // 배포요청
+        REDMINE_TRANSFER_STATUS_ID_APPROVED = '12'     // 배포승인
+        REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS = '13'  // 배포 중
+        REDMINE_TRANSFER_STATUS_ID_DONE = '14'         // 배포완료
+        REDMINE_TRANSFER_STATUS_ID_FAILED = '15'       // 배포실패
 
         // ── 빌드 경로 ────────────────────────────────────────────────
         BUILD_CONTEXT = '.'
