@@ -52,9 +52,6 @@ pipeline {
         REDMINE_TRANSFER_ISSUE_ID = ''
         */
         APP_NAME     = 'genie-us-permission-service'
-        BUILD_TOOL   = 'gradle'
-        REDMINE_URL  = 'http://redmine.cicd.svc.cluster.local'
-        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
     }
 
     stages {
