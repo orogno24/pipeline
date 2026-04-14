@@ -23,7 +23,7 @@ def initEnv() {
 
     env.GIT_URL                        = "http://gitea-http:3000/it-department/${appName}.git"
     env.GIT_CREDENTIALS_ID             = 'gitea-credentials'
-    env.GIT_BRANCH                     = 'dev'
+    env.APP_GIT_BRANCH                 = 'dev'
 
     env.GITOPS_URL                     = 'http://gitea-http:3000/Gitops/kustomize.git'
     env.GITOPS_PATH                    = 'gitea-http:3000/Gitops/kustomize.git'
@@ -302,7 +302,7 @@ def checkout() {
 
             git(
                 url: env.GIT_URL,
-                branch: env.GIT_BRANCH,
+                branch: env.APP_GIT_BRANCH ?: env.GIT_BRANCH,
                 credentialsId: env.GIT_CREDENTIALS_ID
             )
 
