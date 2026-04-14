@@ -119,7 +119,7 @@ pipeline {
 
                         core.dockerPush()
                         core.gitOpsDeploy()
-                        // core.createImageTransferIssue()
+                        core.createImageTransferIssue()
 
                     } catch (err) {
                         echo "Pipeline execution failed: ${err}"
