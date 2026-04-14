@@ -1085,6 +1085,43 @@ def dockerTransferImage() {
     }
 }
 
+def nodeBuild() {
+    stage('Node 빌드') {
+        echo("===============[Node 빌드] 단계 시작===============")
+
+        retry(3) {
+            sh 'node -v'
+            sh 'npm -v'
+            sh 'npm ci'
+            sh 'npm run build'
+        }
+
+        echo("===============[Node 빌드] 단계 종료===============")
+    }
+}
+
+def nodeSonarAnalysis() {
+    stage('Node 정적 코드 분석') {
+        try {
+            withSonarQubeEnv('sonarqube') {
+                sh '''
+                    npm ci
+                    npm run test:coverage
+
+                    npx sonar-scanner \
+                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                      -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+                      -Dsonar.host.url=${SONAR_HOST_URL} \
+                      -Dsonar.token=${SONAR_AUTH_TOKEN}
+                '''
+            }
+        } catch (err) {
+            echo("[Node 정적 코드 분석] 실패: ${err}")
+            throw err
+        }
+    }
+}
+
 /**
  * 소스코드를 압축하여 FTC(File Transfer Center) 업로드 경로로 전송하는 단계
  * 저장소의 조직명(Org)과 앱 이름을 기반으로 아카이브 파일명을 생성함
