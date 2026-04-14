@@ -31,7 +31,7 @@ pipeline {
         GITOPS_DIR = 'genie-us-front/overlay/dev'
         GITOPS_CONTAINER_NAME = 'genie-us-front'
 
-        // ── Harbor 이미지 ─────────────────────────────────────────────
+        // ── Source Harbor 이미지 ─────────────────────────────────────
         DOCKER_REGISTRY_URL = 'harbor-core:80'
         DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
         DOCKER_PROJECT_NAME = 'jtcsb'
@@ -40,11 +40,33 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-front'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
+        // ── Target Harbor 이미지 (이관 대상) ──────────────────────────
+        TARGET_DOCKER_REGISTRY_URL = 'harbor-prod.jtchinae-bank.co.kr'
+        TARGET_DOCKER_PROJECT_NAME = 'jtcsb'
+        TARGET_DOCKER_IMAGE_NAME = 'jtcsb/genie-us-front'
+        TARGET_DOCKER_IMAGE_URL = 'harbor-prod.jtchinae-bank.co.kr/jtcsb/genie-us-front'
+        TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
+
+        // ── Redmine tracker / status (예시값, 실제 ID로 교체 필요) ─────
+        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_PIPELINE_TRACKER_ID = '4'
+
+        REDMINE_TRANSFER_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_TRANSFER_TRACKER_ID = '5'
+
+        REDMINE_TRANSFER_STATUS_ID_REQUESTED = '1'    // 이관요청
+        REDMINE_TRANSFER_STATUS_ID_APPROVED = '2'     // 관리자 승인
+        REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS = '3'  // 이관중
+        REDMINE_TRANSFER_STATUS_ID_DONE = '4'         // 이관완료
+        REDMINE_TRANSFER_STATUS_ID_FAILED = '5'       // 이관실패
+
         // ── 빌드 경로 ────────────────────────────────────────────────
         BUILD_CONTEXT = '.'
         SOURCE_DIR = '.'
 
         SKIP_BUILD = 'false'
+        GITOPS_PR_NUMBER = ''
+        REDMINE_TRANSFER_ISSUE_ID = ''
     }
 
     stages {
@@ -149,6 +171,7 @@ ${changedFiles ?: '없음'}
 
                         core.dockerPush()
                         core.gitOpsDeploy()
+                        core.createImageTransferIssue()
 
                     } catch (err) {
                         echo "Pipeline execution failed: ${err}"
@@ -188,6 +211,8 @@ def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer stat
 - Version: ${env.APP_VERSION ?: 'unknown'}
 - URL: ${env.BUILD_URL ?: ''}
 - SKIP_BUILD: ${env.SKIP_BUILD ?: 'false'}
+- GITOPS_PR_NUMBER: ${env.GITOPS_PR_NUMBER ?: ''}
+- TRANSFER_ISSUE_ID: ${env.REDMINE_TRANSFER_ISSUE_ID ?: ''}
 """
 
         def issueMap = [
