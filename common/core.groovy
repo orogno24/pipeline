@@ -306,31 +306,6 @@ def gradleTest() {
     }
 }
 
-def mavenTest() {
-    stage('Maven 테스트') {
-        echo("===============[Maven 테스트] 단계 시작===============")
-
-        try {
-            sh('mvn test')
-            echo('JUnit Test 성공적으로 실행 완료')
-        } catch (err) {
-            echo("JUnit Test 실패: ${err}")
-            throw err
-        } finally {
-            sh('ls -al target/surefire-reports || echo "리포트 디렉토리 없음"')
-
-            def reportsExist = fileExists('target/surefire-reports')
-            if (reportsExist) {
-                junit('**/target/surefire-reports/*.xml')
-            } else {
-                echo 'JUnit 리포트 파일이 존재하지 않아 junit 스텝을 건너뜁니다.'
-            }
-        }
-
-        echo("===============[Maven 테스트] 단계 종료===============")
-    }
-}
-
 def gradleBuild() {
     stage('Gradle 빌드') {
         echo("===============[Gradle 빌드] 단계 시작===============")
@@ -417,31 +392,6 @@ def gradleSonarAnalysis() {
             }
         } catch (err) {
             echo("[Gradle 정적 코드 분석] 실패: ${err}")
-            throw err
-        }
-    }
-}
-
-def mavenSonarAnalysis() {
-    stage('Maven 정적 코드 분석') {
-        try {
-            echo("===============[Maven 정적 코드 분석] 단계 시작===============")
-
-            withSonarQubeEnv('sonarqube') {
-                sh 'java -version'
-                sh 'mvn -v'
-                sh """
-                    mvn sonar:sonar \
-                        -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \
-                        -Dsonar.projectName='${env.SONAR_PROJECT_NAME}' \
-                        -Dsonar.host.url=${env.SONAR_HOST_URL} \
-                        -Dsonar.token=${SONAR_AUTH_TOKEN}
-                """
-            }
-
-            echo("===============[Maven 정적 코드 분석] 단계 종료===============")
-        } catch (err) {
-            echo("[Maven 정적 코드 분석] 실패: ${err}")
             throw err
         }
     }
@@ -535,99 +485,6 @@ def dockerPush() {
             }
 
             echo("===============[이미지 푸시] 단계 종료===============")
-        }
-    }
-}
-
-def harborImageScan() {
-    stage('이미지 검사') {
-        markStage('이미지 검사', '시작', 91)
-        try {
-            echo("===============[이미지 검사] 단계 시작===============")
-
-            withCredentials([usernamePassword(
-                credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                usernameVariable: 'HARBOR_USER',
-                passwordVariable: 'HARBOR_PASS'
-            )]) {
-                sh '''
-                    curl -v -k -X POST -u "$HARBOR_USER:$HARBOR_PASS" \
-                        "https://$DOCKER_REGISTRY_URL_OPS/api/v2.0/projects/$DOCKER_PROJECT_NAME/repositories/$DOCKER_REPO_NAME/artifacts/$APP_VERSION/scan"
-                '''
-
-                def maxWait = 150
-                def interval = 10
-                def waited = 0
-                def vulnResult = '{}'
-                def found = false
-
-                while (waited < maxWait) {
-                    vulnResult = sh(
-                        script: '''
-                            curl -sk -u "$HARBOR_USER:$HARBOR_PASS" \
-                            "https://$DOCKER_REGISTRY_URL_OPS/api/v2.0/projects/$DOCKER_PROJECT_NAME/repositories/$DOCKER_REPO_NAME/artifacts/$APP_VERSION/additions/vulnerabilities"
-                        ''',
-                        returnStdout: true
-                    ).trim()
-
-                    if (vulnResult != '{}' && vulnResult != '[]' && vulnResult.length() > 5) {
-                        found = true
-                        break
-                    }
-
-                    echo("아직 취약점 데이터가 없습니다. ${interval}초 후 재시도 (경과: ${waited}s)")
-                    sleep interval
-                    waited += interval
-                }
-
-                if (!found) {
-                    error("Harbor 취약점 결과를 ${maxWait}초 내에 받지 못했습니다.")
-                }
-
-                def parsed = readJSON text: vulnResult
-                def reportKey = parsed.keySet().find { it.startsWith('application/vnd.scanner.adapter.vuln.report.harbor') }
-                def report = parsed[reportKey]
-                def severity = report?.severity ?: 'Unknown'
-                def vulnerabilities = report?.vulnerabilities ?: []
-
-                echo("취약점 등급 : ${severity}")
-                def cveList = vulnerabilities.collect { it.id }.join(', ')
-                echo("취약점 코드 : ${cveList ?: '없음'}")
-
-                updateRedmineIssue(
-                    """[이미지 검사] 완료
-- Severity: ${severity}
-- CVE: ${cveList ?: '없음'}
-""",
-                    94
-                )
-
-                if (severity.toLowerCase() == 'critical') {
-                    echo("Critical 취약점 발견")
-                } else {
-                    echo("Critical 취약점 없음, latest 태그 push 실행")
-                    container('docker-dind') {
-                        withCredentials([usernamePassword(
-                            credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                            usernameVariable: 'HARBOR_USER',
-                            passwordVariable: 'HARBOR_PASS'
-                        )]) {
-                            sh '''
-                                echo "$HARBOR_PASS" | docker login "$DOCKER_REGISTRY_URL" -u "$HARBOR_USER" --password-stdin
-                                docker push "$DOCKER_REGISTRY_URL/$DOCKER_IMAGE_NAME:latest"
-                            '''
-                        }
-                    }
-                }
-
-                echo("취약점 상세 결과: ${vulnResult}")
-            }
-
-            markStage('이미지 검사', '성공', 95)
-            echo("===============[이미지 검사] 단계 종료===============")
-        } catch (err) {
-            markStage('이미지 검사', "실패 - ${err}", 91)
-            error("이미지 검사 단계에서 오류 발생")
         }
     }
 }
@@ -1047,36 +904,6 @@ def dockerTransferImage() {
             100,
             (env.REDMINE_TRANSFER_STATUS_ID_DONE ?: "4") as Integer
         )
-    }
-}
-
-def transferEmptyFileToFtc() {
-    stage('FTC 전송') {
-        runStageWithRedmine('FTC 전송', 96, 100) {
-            echo("===============[FTC 전송] 단계 시작===============")
-
-            sh '''
-                set -e
-                FILE_NAME="ftc-test-${BUILD_NUMBER}.txt"
-
-                echo "=== debug start ==="
-                id
-                whoami
-                ls -ld /ftc-upload
-                echo "=== debug end ==="
-
-                cat <<EOF > "${FILE_NAME}"
-Hello FTC
-Build Number: ${BUILD_NUMBER}
-Date: $(date)
-EOF
-
-                cp "${FILE_NAME}" /ftc-upload/
-                ls -l /ftc-upload/"${FILE_NAME}"
-            '''
-
-            echo("===============[FTC 전송] 단계 종료===============")
-        }
     }
 }
 
