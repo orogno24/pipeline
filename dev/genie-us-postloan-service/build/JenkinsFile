@@ -8,6 +8,7 @@ pipeline {
     }
 
     environment {
+        /*
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
 
@@ -45,6 +46,8 @@ pipeline {
         // ── 빌드 경로 ────────────────────────────────────────────────
         BUILD_CONTEXT = '.'
         SOURCE_DIR = '.'
+        */
+        APP_NAME     = 'genie-us-postloan-service'
 
         SKIP_BUILD = 'false'
         GITOPS_PR_NUMBER = ''
@@ -56,6 +59,7 @@ pipeline {
             steps {
                 script {
                     core = load 'common/core.groovy'
+                    core.initEnv()
                 }
             }
         }
