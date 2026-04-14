@@ -858,6 +858,113 @@ def parseTransferRequest(String description) {
     return result
 }
 
+def detectChanges() {
+    dir(env.SOURCE_DIR) {
+        markStage('변경 파일 감지', '시작', 21)
+
+        if (!env.after?.trim() || env.after == 'null') {
+            echo "Webhook 변수가 없어 변경 파일 감지를 생략합니다. 수동 실행으로 간주합니다."
+            env.SKIP_BUILD = 'false'
+            updateRedmineIssue(
+                """[변경 파일 감지] webhook commit 정보 없음
+- 수동 실행으로 간주
+- SKIP_BUILD=false
+""",
+                23
+            )
+            return
+        }
+
+        def changedFiles = ''
+
+        if (env.before?.trim() && env.before != 'null' && !env.before.startsWith('0000000')) {
+            changedFiles = sh(
+                script: "git diff --name-only ${env.before} ${env.after} || true",
+                returnStdout: true
+            ).trim()
+        } else {
+            changedFiles = sh(
+                script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
+                returnStdout: true
+            ).trim()
+        }
+
+        echo "Changed files:\n${changedFiles}"
+
+        env.SKIP_BUILD = changedFiles ? 'false' : 'true'
+        echo "SKIP_BUILD = ${env.SKIP_BUILD}"
+
+        updateRedmineIssue(
+            """[변경 파일 감지] 성공
+- Changed Files:
+${changedFiles ?: '없음'}
+- SKIP_BUILD: ${env.SKIP_BUILD}
+""",
+            25
+        )
+    }
+}
+
+def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer statusId = null) {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID 없음. post Redmine 업데이트 생략"
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def note = """[Pipeline] 전체 ${resultLabel}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${env.BUILD_URL ?: ''}
+- SKIP_BUILD: ${env.SKIP_BUILD ?: 'false'}
+- GITOPS_PR_NUMBER: ${env.GITOPS_PR_NUMBER ?: ''}
+- TRANSFER_ISSUE_ID: ${env.REDMINE_TRANSFER_ISSUE_ID ?: ''}
+"""
+
+        def issueMap = [
+            notes: note
+        ]
+
+        if (doneRatio != null) {
+            issueMap.done_ratio = doneRatio
+        }
+
+        if (statusId != null) {
+            issueMap.status_id = statusId
+        }
+
+        def payload = [issue: issueMap]
+
+        writeFile(
+            file: 'redmine_post.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
+            script: '''
+                set +e
+                curl -sS -o redmine_post_response.txt -w "%{http_code}" \
+                  -X PUT "$REDMINE_URL/issues/$REDMINE_ISSUE_ID.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  --data @redmine_post.json
+            ''',
+            returnStdout: true
+        ).trim()
+
+        def responseText = readFile('redmine_post_response.txt').trim()
+        echo "Redmine post target issue: ${env.REDMINE_ISSUE_ID}"
+        echo "Redmine post HTTP code: ${httpCode}"
+        echo "Redmine post response: ${responseText}"
+
+        if (!(httpCode in ['200', '204'])) {
+            error("Redmine post update failed: HTTP ${httpCode}, response=${responseText}")
+        }
+    }
+}
+
 /**
  * Redmine 이슈를 읽어와 이관에 필요한 정보들을 환경 변수에 로드하는 함수
  */
