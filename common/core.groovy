@@ -1,18 +1,26 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurperClassic
 
+/**
+ * JSON 특수 문자 이스케이프 처리 함수
+ */
 def jsonEscape(val) {
     if (val == null) return ""
     return val
-        .toString()
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
+    .toString()
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+    .replace("\r", "\\r")
+    .replace("\n", "\\n")
 }
 
+/**
+ * Redmine에 새로운 이슈(티켓)를 생성하는 함수
+ * 빌드 정보(프로젝트, 브랜치, 커밋 SHA 등)를 포함하여 생성함
+ */
 def createRedmineIssue(String status = "시작") {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        // 현재 Git 커밋 해시값 추출
         def commitSha = sh(
             script: 'git rev-parse HEAD',
             returnStdout: true
@@ -31,17 +39,19 @@ def createRedmineIssue(String status = "시작") {
 빌드 URL: ${env.BUILD_URL ?: ''}
 """
 
+        // Redmine API 전송을 위한 페이로드 구성
         def payload = [
             issue: [
                 project_id : env.REDMINE_PIPELINE_PROJECT_ID ?: "jt-genie-lam",
                 tracker_id : (env.REDMINE_PIPELINE_TRACKER_ID ?: "4"),
                 subject    : subject,
                 description: description,
-                status_id  : 13,
+                status_id  : 13, // 특정 상태 ID 지정
                 done_ratio : 0
             ]
         ]
 
+        // JSON 파일 생성 및 curl을 이용한 Redmine API 호출 (POST)
         writeFile(
             file: 'redmine_issue.json',
             text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
@@ -67,6 +77,7 @@ def createRedmineIssue(String status = "시작") {
             error("Redmine 이슈 생성 실패: HTTP ${httpCode}, response=${responseText}")
         }
 
+        // 응답에서 생성된 이슈 ID 파싱 및 환경 변수 저장
         def parsed
         try {
             parsed = new JsonSlurperClassic().parseText(responseText)
@@ -84,6 +95,9 @@ def createRedmineIssue(String status = "시작") {
     }
 }
 
+/**
+ * 기존 Redmine 이슈를 업데이트하는 함수 (노트 추가, 진척도 및 상태 변경)
+ */
 def updateRedmineIssue(String note, Integer doneRatio = null, Integer statusId = null) {
     if (!env.REDMINE_ISSUE_ID?.trim()) {
         echo "REDMINE_ISSUE_ID 가 없어 Redmine 업데이트를 건너뜁니다."
@@ -105,6 +119,7 @@ def updateRedmineIssue(String note, Integer doneRatio = null, Integer statusId =
 
         def payload = [issue: issueMap]
 
+        // JSON 파일 생성 및 curl을 이용한 Redmine API 호출 (PUT)
         writeFile(
             file: 'redmine_update.json',
             text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
@@ -133,6 +148,9 @@ def updateRedmineIssue(String note, Integer doneRatio = null, Integer statusId =
     }
 }
 
+/**
+ * 이미지 이관용 별도 Redmine 이슈를 업데이트하는 함수
+ */
 def updateTransferIssue(String note, Integer doneRatio = null, Integer statusId = null) {
     if (!env.REDMINE_TRANSFER_ISSUE_ID?.trim()) {
         echo "REDMINE_TRANSFER_ISSUE_ID 가 없어 Transfer Redmine 업데이트를 건너뜁니다."
@@ -182,6 +200,9 @@ def updateTransferIssue(String note, Integer doneRatio = null, Integer statusId 
     }
 }
 
+/**
+ * 특정 단계(Stage)의 시작/종료 메시지를 Redmine 노트로 기록하는 헬퍼 함수
+ */
 def markStage(String stageName, String result, Integer doneRatio) {
     def msg = """[${stageName}] ${result}
 - Job: ${env.JOB_NAME}
@@ -193,6 +214,9 @@ def markStage(String stageName, String result, Integer doneRatio) {
     updateRedmineIssue(msg, doneRatio)
 }
 
+/**
+ * 파이프라인 전체 시작 시 Redmine 이슈를 생성하고 초기 메시지를 남기는 함수
+ */
 def createOrUpdateStartIssue() {
     createRedmineIssue("시작")
     updateRedmineIssue(
@@ -207,6 +231,9 @@ def createOrUpdateStartIssue() {
     )
 }
 
+/**
+ * 각 Stage 실행 시 Redmine에 시작과 성공/실패 상태를 자동으로 업데이트하는 래퍼(Wrapper) 함수
+ */
 def runStageWithRedmine(String stageName, Integer startRatio, Integer successRatio, Closure body) {
     markStage(stageName, '시작', startRatio)
     try {
@@ -218,6 +245,10 @@ def runStageWithRedmine(String stageName, Integer startRatio, Integer successRat
     }
 }
 
+/**
+ * 소스코드 체크아웃 단계
+ * Git 레포지토리에서 소스를 가져오고 단축 커밋 해시를 버전으로 사용함
+ */
 def checkout() {
     stage('소스코드 체크아웃') {
         try {
@@ -244,6 +275,10 @@ def checkout() {
     }
 }
 
+/**
+ * 소스코드 빌드 단계
+ * 설정된 빌드 도구(Gradle/Maven)에 따라 적절한 빌드 함수를 호출함
+ */
 def build() {
     stage('소스코드 빌드') {
         runStageWithRedmine('소스코드 빌드', 25, 40) {
@@ -262,6 +297,9 @@ def build() {
     }
 }
 
+/**
+ * 단위 테스트 단계
+ */
 def test() {
     stage('테스트') {
         runStageWithRedmine('테스트', 45, 55) {
@@ -280,6 +318,9 @@ def test() {
     }
 }
 
+/**
+ * Gradle을 사용한 테스트 실행 및 결과 리포트 처리
+ */
 def gradleTest() {
     stage('Gradle 테스트') {
         echo("===============[Gradle 테스트] 단계 시작===============")
@@ -306,11 +347,14 @@ def gradleTest() {
     }
 }
 
+/**
+ * Gradle을 사용한 소스 빌드 (테스트 제외)
+ */
 def gradleBuild() {
     stage('Gradle 빌드') {
         echo("===============[Gradle 빌드] 단계 시작===============")
 
-        retry(3) {
+        retry(3) { // 실패 시 최대 3번 재시도
             try {
                 sh 'java -version'
                 sh 'chmod +x ./gradlew'
@@ -330,6 +374,9 @@ def gradleBuild() {
     }
 }
 
+/**
+ * Maven을 사용한 소스 빌드 (테스트 제외)
+ */
 def mavenBuild() {
     stage('Maven 빌드') {
         echo("===============[Maven 빌드] 단계 시작===============")
@@ -353,6 +400,9 @@ def mavenBuild() {
     }
 }
 
+/**
+ * SonarQube를 이용한 정적 코드 분석 단계
+ */
 def sonarAnalysis() {
     stage('정적 코드 분석') {
         markStage('정적 코드 분석', '시작', 60)
@@ -376,6 +426,9 @@ def sonarAnalysis() {
     }
 }
 
+/**
+ * Gradle 프로젝트용 SonarQube 분석 실행
+ */
 def gradleSonarAnalysis() {
     stage('Gradle 정적 코드 분석') {
         try {
@@ -397,12 +450,16 @@ def gradleSonarAnalysis() {
     }
 }
 
+/**
+ * SonarQube 분석 결과를 대기하고 품질 게이트(Quality Gate) 상태를 확인하는 단계
+ */
 def sonarAnalysisResult() {
     stage('소나큐브 분석 결과') {
         markStage('소나큐브 분석 결과', '시작', 66)
         try {
             echo("===============[소나큐브 분석 결과] 단계 시작===============")
 
+            // 결과 파일 존재 여부 확인
             def reportTaskExists = fileExists('build/sonar/report-task.txt')
             if (!reportTaskExists) {
                 def mavenReportTaskExists = fileExists('target/sonar/report-task.txt')
@@ -415,6 +472,7 @@ def sonarAnalysisResult() {
                 }
             }
 
+            // 품질 게이트 결과 대기 (최대 10분)
             withSonarQubeEnv('sonarqube') {
                 timeout(time: 10, unit: 'MINUTES') {
                     try {
@@ -448,6 +506,9 @@ def sonarAnalysisResult() {
     }
 }
 
+/**
+ * Docker 이미지를 빌드하고 태그를 지정하는 단계
+ */
 def dockerBuild() {
     stage('이미지 빌드') {
         runStageWithRedmine('이미지 빌드', 72, 82) {
@@ -465,6 +526,9 @@ def dockerBuild() {
     }
 }
 
+/**
+ * 빌드된 Docker 이미지를 Harbor 등 원격 레지스트리에 푸시하는 단계
+ */
 def dockerPush() {
     stage('이미지 푸시') {
         runStageWithRedmine('이미지 푸시', 83, 90) {
@@ -489,6 +553,10 @@ def dockerPush() {
     }
 }
 
+/**
+ * GitOps 저장소의 설정을 업데이트하여 배포를 트리거하는 단계
+ * Kustomization 파일 수정, PR(Pull Request) 생성 및 자동 머지 수행
+ */
 def gitOpsDeploy() {
     stage('GitOps 배포') {
         runStageWithRedmine('GitOps 배포', 95, 100) {
@@ -507,6 +575,7 @@ def gitOpsDeploy() {
                     usernameVariable: 'GITOPS_USERNAME'
                 )]) {
 
+                    // 현재 적용된 이미지 태그 확인
                     def currentVersion = sh(
                         script: "grep 'newTag:' kustomization.yaml | awk -F ':' '{print \$2}' | head -n 1",
                         returnStdout: true
@@ -517,9 +586,11 @@ def gitOpsDeploy() {
 
                     def featureBranch = "${env.GITOPS_CONTAINER_NAME}-${env.GIT_BRANCH}-${env.APP_VERSION}"
 
+                    // 버전이 다를 경우에만 업데이트 진행
                     if (currentVersion != env.APP_VERSION) {
                         echo("이미지 태그가 달라 GitOps 업데이트를 진행합니다.")
 
+                        // 파일 수정 및 원격 브랜치 푸시
                         sh """
                             git config --global user.email "jenkins@okestro.com"
                             git config --global user.name "jenkins"
@@ -532,6 +603,7 @@ def gitOpsDeploy() {
                             git push http://${GITOPS_USERNAME}:${GITOPS_PASSWORD}@${GITOPS_PATH} ${featureBranch}
                         """
 
+                        // Gitea API를 통한 PR 생성
                         def giteaApiUrl = env.GITOPS_API_URL
 
                         def prNumber = sh(
@@ -562,6 +634,7 @@ def gitOpsDeploy() {
                             97
                         )
 
+                        // PR 자동 머지 시도 (성공할 때까지 재시도)
                         def merged = false
                         def retryCnt = 0
                         while (!merged && retryCnt < 10) {
@@ -590,6 +663,7 @@ def gitOpsDeploy() {
                             }
                         }
 
+                        // 머지 성공 후 사용한 피처 브랜치 삭제
                         if (merged) {
                             sleep 5
                             sh("git checkout ${env.GITOPS_BRANCH}")
@@ -632,6 +706,9 @@ def gitOpsDeploy() {
     }
 }
 
+/**
+ * 관리자 승인을 위한 이미지 이관(Transfer) 요청 Redmine 이슈를 생성하는 단계
+ */
 def createImageTransferIssue() {
     stage('이미지 이관 요청 생성') {
         updateRedmineIssue(
@@ -646,6 +723,7 @@ def createImageTransferIssue() {
         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
             def subject = "[이미지 이관 요청] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${env.APP_VERSION}"
 
+            // 이관 처리에 필요한 메타데이터를 [REQUEST_INFO] 블록에 포함하여 설명문 작성
             def description = """이미지 이관 요청
 
 아래 정보는 Jenkins가 자동 생성했습니다.
@@ -740,6 +818,9 @@ ORIGIN_BUILD_URL=${env.BUILD_URL ?: ''}
     }
 }
 
+/**
+ * Redmine 이슈 ID를 통해 이슈의 상세 정보(히스토리 포함)를 조회하는 함수
+ */
 def readRedmineIssue(String issueId) {
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
         def httpCode = sh(
@@ -768,6 +849,9 @@ def readRedmineIssue(String issueId) {
     }
 }
 
+/**
+ * Redmine 이슈 본문(Description)에서 [REQUEST_INFO] 블록 내의 키=값 쌍들을 파싱하는 함수
+ */
 def parseTransferRequest(String description) {
     if (!description?.trim()) {
         error("Redmine description 이 비어 있습니다.")
@@ -805,6 +889,9 @@ def parseTransferRequest(String description) {
     return result
 }
 
+/**
+ * Redmine 이슈를 읽어와 이관에 필요한 정보들을 환경 변수에 로드하는 함수
+ */
 def loadTransferIssueFromRedmine(String issueId) {
     def parsed = readRedmineIssue(issueId)
     def issue = parsed?.issue
@@ -843,6 +930,9 @@ def loadTransferIssueFromRedmine(String issueId) {
     echo "TRANSFER_IMAGE_TAG=${env.TRANSFER_IMAGE_TAG}"
 }
 
+/**
+ * 실제로 이미지를 한 레지스트리에서 다른 레지스트리로 이관(Pull -> Tag -> Push)하는 단계
+ */
 def dockerTransferImage() {
     stage('이미지 이관') {
         if (!env.TRANSFER_SOURCE_IMAGE?.trim()) {
@@ -907,6 +997,10 @@ def dockerTransferImage() {
     }
 }
 
+/**
+ * 소스코드를 압축하여 FTC(File Transfer Center) 업로드 경로로 전송하는 단계
+ * 저장소의 조직명(Org)과 앱 이름을 기반으로 아카이브 파일명을 생성함
+ */
 def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '', String appName = 'app') {
     stage('소스코드 FTC 전송') {
         runStageWithRedmine('소스코드 FTC 전송', 96, 100) {
@@ -918,6 +1012,7 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
                 INPUT_ORG_NAME="${orgName}"
                 APP_NAME="${appName}"
 
+                # Git 원격 주소에서 조직명 추출 시도
                 REMOTE_URL=\$(git -C "${sourceDir}" remote get-url origin || true)
                 AUTO_ORG_NAME=\$(printf '%s\n' "\${REMOTE_URL}" | sed -E 's#.+[:/]([^/]+)/[^/]+(\\.git)?#\\1#' || true)
 
@@ -930,7 +1025,6 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
                 fi
 
                 BUILD_DATE=\$(date +%Y%m%d%H%M%S)
-
                 ARCHIVE_NAME="org=\${ORG_NAME}__app=\${APP_NAME}__build=${BUILD_NUMBER}__date=\${BUILD_DATE}.tar.gz"
 
                 echo "=== debug start ==="
@@ -942,6 +1036,7 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
 
                 mkdir -p dist
 
+                # 불필요한 디렉토리(.git, target, build 등)를 제외하고 압축
                 tar -C "${sourceDir}" \
                     --exclude='.git' \
                     --exclude='dist' \
@@ -951,6 +1046,7 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
                     --exclude='build' \
                     -czf "dist/\${ARCHIVE_NAME}" .
 
+                # 지정된 업로드 경로로 복사
                 cp "dist/\${ARCHIVE_NAME}" /ftc-upload/
 
                 echo "=== archive created ==="
