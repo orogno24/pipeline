@@ -8,6 +8,7 @@ pipeline {
     }
 
     environment {
+        /*
         BUILD_TOOL = 'gradle'
         REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
 
@@ -56,6 +57,11 @@ pipeline {
         SKIP_BUILD = 'false'
         GITOPS_PR_NUMBER = ''
         REDMINE_TRANSFER_ISSUE_ID = ''
+        */
+        APP_NAME     = 'genie-us-auth-service'
+        BUILD_TOOL   = 'gradle'
+        REDMINE_URL  = 'http://redmine.cicd.svc.cluster.local'
+        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
     }
 
     stages {
@@ -63,6 +69,7 @@ pipeline {
             steps {
                 script {
                     core = load 'common/core.groovy'
+                    core.initEnv()
                 }
             }
         }
