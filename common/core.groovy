@@ -14,6 +14,52 @@ def jsonEscape(val) {
     .replace("\n", "\\n")
 }
 
+//공통 변수 정의 함수
+def initEnv() {
+    def appName = env.APP_NAME
+    if (!appName?.trim()) {
+        error("APP_NAME 환경변수가 없습니다.")
+    }
+
+    env.GIT_URL                        = "http://gitea-http:3000/it-department/${appName}.git"
+    env.GIT_CREDENTIALS_ID             = 'gitea-credentials'
+    env.GIT_BRANCH                     = env.GIT_BRANCH ?: 'dev'
+
+    env.GITOPS_URL                     = 'http://gitea-http:3000/Gitops/kustomize.git'
+    env.GITOPS_PATH                    = 'gitea-http:3000/Gitops/kustomize.git'
+    env.GITOPS_API_URL                 = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
+    env.GITOPS_CREDENTIALS_ID          = 'gitea-credentials'
+    env.GITOPS_BRANCH                  = 'main'
+    env.GITOPS_DIR                     = "${appName}/overlay/dev"
+    env.GITOPS_CONTAINER_NAME          = appName
+
+    env.DOCKER_REGISTRY_URL            = 'harbor-core:80'
+    env.DOCKER_REGISTRY_URL_OPS        = 'harbor.jtchinae-bank.co.kr'
+    env.DOCKER_PROJECT_NAME            = 'jtcsb'
+    env.DOCKER_IMAGE_NAME              = "jtcsb/${appName}"
+    env.DOCKER_REPO_NAME               = appName
+    env.DOCKER_IMAGE_URL               = "harbor.jtchinae-bank.co.kr/jtcsb/${appName}"
+    env.DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
+
+    env.TARGET_DOCKER_REGISTRY_URL     = 'harbor-prod.jtchinae-bank.co.kr'
+    env.TARGET_DOCKER_PROJECT_NAME     = 'jtcsb'
+    env.TARGET_DOCKER_IMAGE_NAME       = "jtcsb/${appName}"
+    env.TARGET_DOCKER_IMAGE_URL        = "harbor-prod.jtchinae-bank.co.kr/jtcsb/${appName}"
+    env.TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
+
+    env.SONAR_PROJECT_KEY              = appName
+    env.SONAR_PROJECT_NAME             = appName
+
+    env.REDMINE_PIPELINE_PROJECT_ID    = appName
+    env.REDMINE_PIPELINE_TRACKER_ID    = '4'
+
+    env.BUILD_CONTEXT                  = '.'
+    env.SOURCE_DIR                     = '.'
+    env.SKIP_BUILD                     = 'false'
+
+    echo "initEnv() 완료: APP_NAME=${appName}"
+}
+
 /**
  * Redmine에 새로운 이슈(티켓)를 생성하는 함수
  * 빌드 정보(프로젝트, 브랜치, 커밋 SHA 등)를 포함하여 생성함
