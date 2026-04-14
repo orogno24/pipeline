@@ -39,7 +39,7 @@ pipeline {
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
         // ── Redmine tracker / status ─────
-        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_PIPELINE_PROJECT_ID = 'genie-us-postloan-service'
         REDMINE_PIPELINE_TRACKER_ID = '4'
 
         // ── 빌드 경로 ────────────────────────────────────────────────
