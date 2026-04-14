@@ -115,8 +115,6 @@ pipeline {
                             return
                         }
 
-                        core.dockerBuild()
-
                         container('node') {
                             dir(env.BUILD_CONTEXT) {
                                 core.nodeBuild()
@@ -125,6 +123,7 @@ pipeline {
                             }
                         }
                         
+                        core.dockerBuild()
                         core.dockerPush()
                         core.gitOpsDeploy()
                         core.createImageTransferIssue()
