@@ -48,10 +48,10 @@ pipeline {
         TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
 
         // ── Redmine tracker / status (예시값, 실제 ID로 교체 필요) ─────
-        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-front'
         REDMINE_PIPELINE_TRACKER_ID = '4'
 
-        REDMINE_TRANSFER_PROJECT_ID = 'jt-genie-lam'
+        REDMINE_TRANSFER_PROJECT_ID = 'jt-genie-front'
         REDMINE_TRANSFER_TRACKER_ID = '5'
 
         // 시험망 일감 상태 기준
