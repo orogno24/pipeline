@@ -43,7 +43,7 @@ def createRedmineIssue(String status = "시작") {
         def payload = [
             issue: [
                 project_id : env.REDMINE_PIPELINE_PROJECT_ID,
-                tracker_id : (env.REDMINE_PIPELINE_TRACKER_ID ?: "4"),
+                tracker_id : 4,
                 subject    : subject,
                 description: description,
                 status_id  : 13,  //개발배포중으로 이슈 생성
@@ -712,13 +712,7 @@ def gitOpsDeploy() {
 def createImageTransferIssue() {
     stage('이미지 이관 요청 생성') {
         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-            def redmineProjectId = env.REDMINE_TRANSFER_PROJECT_ID?.trim() ?: env.REDMINE_PIPELINE_PROJECT_ID?.trim()
-            def redmineTrackerId = env.REDMINE_TRANSFER_TRACKER_ID?.trim() ?: env.REDMINE_PIPELINE_TRACKER_ID?.trim() ?: "4"
-
-            if (!redmineProjectId) {
-                error("REDMINE_TRANSFER_PROJECT_ID 또는 REDMINE_PIPELINE_PROJECT_ID 값이 없습니다.")
-            }
-
+            
             def subject = "[이미지 이관 요청] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${env.APP_VERSION}"
 
             def description = """이미지 이관 요청
@@ -733,8 +727,8 @@ def createImageTransferIssue() {
 
             def payload = [
                 issue: [
-                    project_id : redmineProjectId,
-                    tracker_id : redmineTrackerId,
+                    project_id : env.REDMINE_PIPELINE_PROJECT_ID,
+                    tracker_id : 4,
                     subject    : subject,
                     description: description,
                     status_id  : 13,  //개발배포중으로 이슈 생성
