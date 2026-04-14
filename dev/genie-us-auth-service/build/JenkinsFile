@@ -40,6 +40,28 @@ pipeline {
         DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-auth-service'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
 
+        // ── Target Harbor 이미지 (이관 대상) ──────────────────────────
+        TARGET_DOCKER_REGISTRY_URL = 'harbor-prod.jtchinae-bank.co.kr'
+        TARGET_DOCKER_PROJECT_NAME = 'jtcsb'
+        TARGET_DOCKER_IMAGE_NAME = 'jtcsb/genie-us-auth-service'
+        TARGET_DOCKER_IMAGE_URL = 'harbor-prod.jtchinae-bank.co.kr/jtcsb/genie-us-auth-service'
+        TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
+
+        // ── Redmine tracker / status (예시값, 실제 ID로 교체 필요) ─────
+        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-auth'
+        REDMINE_PIPELINE_TRACKER_ID = '4'
+
+        REDMINE_TRANSFER_PROJECT_ID = 'jt-genie-auth'
+        REDMINE_TRANSFER_TRACKER_ID = '5'
+
+        // 시험망 일감 상태 기준
+        REDMINE_TRANSFER_STATUS_ID_REQUESTED = '11'    // 배포요청
+        REDMINE_TRANSFER_STATUS_ID_APPROVED = '12'     // 배포승인
+        REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS = '13'  // 배포 중
+        REDMINE_TRANSFER_STATUS_ID_DONE = '14'         // 배포완료
+        REDMINE_TRANSFER_STATUS_ID_FAILED = '15'       // 배포실패
+
+
         // ── 빌드 경로 ────────────────────────────────────────────────
         BUILD_CONTEXT = '.'
         SOURCE_DIR = '.'
