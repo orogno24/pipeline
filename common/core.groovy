@@ -46,7 +46,7 @@ def createRedmineIssue(String status = "시작") {
                 tracker_id : (env.REDMINE_PIPELINE_TRACKER_ID ?: "4"),
                 subject    : subject,
                 description: description,
-                status_id  : 13, // 특정 상태 ID 지정
+                status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "1"),
                 done_ratio : 0
             ]
         ]
@@ -711,54 +711,23 @@ def gitOpsDeploy() {
  */
 def createImageTransferIssue() {
     stage('이미지 이관 요청 생성') {
-        updateRedmineIssue(
-            """[이미지 이관 요청] 생성 시작
-- Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- GitOps PR: ${env.GITOPS_PR_NUMBER ?: '없음'}
-""",
-            100
-        )
-
         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
             def subject = "[이미지 이관 요청] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${env.APP_VERSION}"
 
-            // 이관 처리에 필요한 메타데이터를 [REQUEST_INFO] 블록에 포함하여 설명문 작성
             def description = """이미지 이관 요청
 
 아래 정보는 Jenkins가 자동 생성했습니다.
 관리자가 상태를 승인 상태로 변경하면 별도 Jenkins Job이 실행되어 이미지를 다른 Harbor로 이관합니다.
 
-[REQUEST_INFO]
-REQUEST_TYPE=IMAGE_TRANSFER
-SOURCE_REGISTRY=${env.DOCKER_REGISTRY_URL}
-SOURCE_IMAGE=${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-SOURCE_REPOSITORY=${env.DOCKER_IMAGE_NAME}
-TARGET_REGISTRY=${env.TARGET_DOCKER_REGISTRY_URL}
-TARGET_IMAGE=${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
-TARGET_REPOSITORY=${env.TARGET_DOCKER_IMAGE_NAME}
-IMAGE_TAG=${env.APP_VERSION}
-SERVICE_NAME=${env.GITOPS_CONTAINER_NAME}
-GIT_BRANCH=${env.GIT_BRANCH}
-GITOPS_PR_NUMBER=${env.GITOPS_PR_NUMBER ?: ''}
-ORIGIN_PIPELINE_ISSUE_ID=${env.REDMINE_ISSUE_ID ?: ''}
-ORIGIN_JOB_NAME=${env.JOB_NAME ?: ''}
-ORIGIN_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}
-ORIGIN_BUILD_URL=${env.BUILD_URL ?: ''}
-[/REQUEST_INFO]
-
 요약
-- Source Harbor: ${env.DOCKER_REGISTRY_URL}
 - Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- Target Harbor: ${env.TARGET_DOCKER_REGISTRY_URL}
-- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- GitOps PR: ${env.GITOPS_PR_NUMBER ?: '없음'}
+- Target Image: 'harbor-prod.jtchinae-bank.co.kr/jtcsb/genie-us-front:'${env.APP_VERSION}
 """
 
             def payload = [
                 issue: [
                     project_id : env.REDMINE_TRANSFER_PROJECT_ID ?: "jt-genie-lam",
-                    tracker_id : env.REDMINE_TRANSFER_TRACKER_ID ?: "5",
+                    tracker_id : env.REDMINE_TRANSFER_TRACKER_ID ?: "4",
                     subject    : subject,
                     description: description,
                     status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "1"),
