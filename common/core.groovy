@@ -23,7 +23,7 @@ def initEnv() {
 
     env.REDMINE_URL    = 'http://redmine.cicd.svc.cluster.local'
     env.SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
-    BUILD_TOOL = 'gradle'
+    env.BUILD_TOOL = 'gradle'
 
     env.APP_GIT_URL            = "http://gitea-http:3000/it-department/${appName}.git"
     env.APP_GIT_CREDENTIALS_ID = 'gitea-credentials'
