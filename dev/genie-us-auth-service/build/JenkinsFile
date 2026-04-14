@@ -46,7 +46,7 @@ pipeline {
         TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
 
         // ── Redmine tracker / status (예시값, 실제 ID로 교체 필요) ─────
-        REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-auth'
+        REDMINE_PIPELINE_PROJECT_ID = 'genie-us-auth-service'
         REDMINE_PIPELINE_TRACKER_ID = '4'
 
         // ── 빌드 경로 ────────────────────────────────────────────────
