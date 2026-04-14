@@ -33,11 +33,11 @@ def createRedmineIssue(String status = "시작") {
 
         def payload = [
             issue: [
-                project_id : "jt-genie-lam",
-                tracker_id : 4,   
+                project_id : env.REDMINE_PIPELINE_PROJECT_ID ?: "jt-genie-lam",
+                tracker_id : (env.REDMINE_PIPELINE_TRACKER_ID ?: "4"),
                 subject    : subject,
                 description: description,
-                status_id  : 13,  //개발배포중으로 이슈 생성
+                status_id  : 13,
                 done_ratio : 0
             ]
         ]
@@ -129,6 +129,55 @@ def updateRedmineIssue(String note, Integer doneRatio = null, Integer statusId =
 
         if (!(httpCode in ['200', '204'])) {
             error("Redmine 이슈 업데이트 실패: issue=${env.REDMINE_ISSUE_ID}, HTTP ${httpCode}, response=${responseText}")
+        }
+    }
+}
+
+def updateTransferIssue(String note, Integer doneRatio = null, Integer statusId = null) {
+    if (!env.REDMINE_TRANSFER_ISSUE_ID?.trim()) {
+        echo "REDMINE_TRANSFER_ISSUE_ID 가 없어 Transfer Redmine 업데이트를 건너뜁니다."
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def issueMap = [
+            notes: note
+        ]
+
+        if (doneRatio != null) {
+            issueMap.done_ratio = doneRatio
+        }
+
+        if (statusId != null) {
+            issueMap.status_id = statusId
+        }
+
+        def payload = [issue: issueMap]
+
+        writeFile(
+            file: 'redmine_transfer_update.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def httpCode = sh(
+            script: '''
+                set +e
+                curl -sS -o redmine_transfer_update_response.txt -w "%{http_code}" \
+                  -X PUT "$REDMINE_URL/issues/$REDMINE_TRANSFER_ISSUE_ID.json" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  --data @redmine_transfer_update.json
+            ''',
+            returnStdout: true
+        ).trim()
+
+        def responseText = readFile('redmine_transfer_update_response.txt').trim()
+        echo "Redmine transfer update target issue: ${env.REDMINE_TRANSFER_ISSUE_ID}"
+        echo "Redmine transfer update HTTP code: ${httpCode}"
+        echo "Redmine transfer update response: ${responseText}"
+
+        if (!(httpCode in ['200', '204'])) {
+            error("Transfer 이슈 업데이트 실패: issue=${env.REDMINE_TRANSFER_ISSUE_ID}, HTTP ${httpCode}, response=${responseText}")
         }
     }
 }
@@ -644,6 +693,8 @@ def gitOpsDeploy() {
                             returnStdout: true
                         ).trim()
 
+                        env.GITOPS_PR_NUMBER = prNumber ?: ''
+
                         echo "생성된 PR 번호: ${prNumber}"
 
                         updateRedmineIssue(
@@ -707,6 +758,7 @@ def gitOpsDeploy() {
                             error("Gitea Merge Failed")
                         }
                     } else {
+                        env.GITOPS_PR_NUMBER = ''
                         updateRedmineIssue(
                             """[GitOps 배포] 현재 GitOps 태그와 동일하여 업데이트 생략
 - Current Tag: ${currentVersion}
@@ -720,6 +772,281 @@ def gitOpsDeploy() {
 
             echo("===============[GitOps 배포] 단계 종료===============")
         }
+    }
+}
+
+def createImageTransferIssue() {
+    stage('이미지 이관 요청 생성') {
+        updateRedmineIssue(
+            """[이미지 이관 요청] 생성 시작
+- Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
+- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
+- GitOps PR: ${env.GITOPS_PR_NUMBER ?: '없음'}
+""",
+            100
+        )
+
+        withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+            def subject = "[이미지 이관 요청] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${env.APP_VERSION}"
+
+            def description = """이미지 이관 요청
+
+아래 정보는 Jenkins가 자동 생성했습니다.
+관리자가 상태를 승인 상태로 변경하면 별도 Jenkins Job이 실행되어 이미지를 다른 Harbor로 이관합니다.
+
+[REQUEST_INFO]
+REQUEST_TYPE=IMAGE_TRANSFER
+SOURCE_REGISTRY=${env.DOCKER_REGISTRY_URL}
+SOURCE_IMAGE=${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
+SOURCE_REPOSITORY=${env.DOCKER_IMAGE_NAME}
+TARGET_REGISTRY=${env.TARGET_DOCKER_REGISTRY_URL}
+TARGET_IMAGE=${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
+TARGET_REPOSITORY=${env.TARGET_DOCKER_IMAGE_NAME}
+IMAGE_TAG=${env.APP_VERSION}
+SERVICE_NAME=${env.GITOPS_CONTAINER_NAME}
+GIT_BRANCH=${env.GIT_BRANCH}
+GITOPS_PR_NUMBER=${env.GITOPS_PR_NUMBER ?: ''}
+ORIGIN_PIPELINE_ISSUE_ID=${env.REDMINE_ISSUE_ID ?: ''}
+ORIGIN_JOB_NAME=${env.JOB_NAME ?: ''}
+ORIGIN_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}
+ORIGIN_BUILD_URL=${env.BUILD_URL ?: ''}
+[/REQUEST_INFO]
+
+요약
+- Source Harbor: ${env.DOCKER_REGISTRY_URL}
+- Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
+- Target Harbor: ${env.TARGET_DOCKER_REGISTRY_URL}
+- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
+- GitOps PR: ${env.GITOPS_PR_NUMBER ?: '없음'}
+"""
+
+            def payload = [
+                issue: [
+                    project_id : env.REDMINE_TRANSFER_PROJECT_ID ?: "jt-genie-lam",
+                    tracker_id : env.REDMINE_TRANSFER_TRACKER_ID ?: "5",
+                    subject    : subject,
+                    description: description,
+                    status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "1"),
+                    done_ratio : 0
+                ]
+            ]
+
+            writeFile(
+                file: 'redmine_transfer_issue.json',
+                text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+            )
+
+            def httpCode = sh(
+                script: '''
+                    set -e
+                    curl -sS -o redmine_transfer_create_response.json -w "%{http_code}" \
+                      -X POST "$REDMINE_URL/issues.json" \
+                      -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+                      -H "Content-Type: application/json" \
+                      --data @redmine_transfer_issue.json
+                ''',
+                returnStdout: true
+            ).trim()
+
+            def responseText = readFile('redmine_transfer_create_response.json').trim()
+            echo "Redmine transfer create HTTP code: ${httpCode}"
+            echo "Redmine transfer create response: ${responseText}"
+
+            if (!(httpCode in ['200', '201'])) {
+                error("Redmine transfer 이슈 생성 실패: HTTP ${httpCode}, response=${responseText}")
+            }
+
+            def parsed
+            try {
+                parsed = new JsonSlurperClassic().parseText(responseText)
+            } catch (err) {
+                error("Redmine transfer create 응답 JSON 파싱 실패: ${err}\nresponse=${responseText}")
+            }
+
+            def issueId = parsed?.issue?.id?.toString()
+            if (!issueId) {
+                error("Redmine transfer 이슈 생성 실패: issue.id를 찾지 못했습니다. response=${responseText}")
+            }
+
+            env.REDMINE_TRANSFER_ISSUE_ID = issueId
+            echo "Redmine transfer issue created: ${env.REDMINE_TRANSFER_ISSUE_ID}"
+
+            updateRedmineIssue(
+                """[이미지 이관 요청] 생성 완료
+- Transfer Issue ID: ${env.REDMINE_TRANSFER_ISSUE_ID}
+- Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
+- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
+""",
+                100
+            )
+        }
+    }
+}
+
+def readRedmineIssue(String issueId) {
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def httpCode = sh(
+            script: """
+                set +e
+                curl -sS -o redmine_issue_detail.json -w "%{http_code}" \
+                  -X GET "$REDMINE_URL/issues/${issueId}.json?include=journals" \
+                  -H "X-Redmine-API-Key: $REDMINE_API_KEY"
+            """,
+            returnStdout: true
+        ).trim()
+
+        def responseText = readFile('redmine_issue_detail.json').trim()
+        echo "Redmine issue read HTTP code: ${httpCode}"
+        echo "Redmine issue read response: ${responseText}"
+
+        if (!(httpCode in ['200'])) {
+            error("Redmine issue 조회 실패: issue=${issueId}, HTTP ${httpCode}, response=${responseText}")
+        }
+
+        try {
+            return new JsonSlurperClassic().parseText(responseText)
+        } catch (err) {
+            error("Redmine issue 조회 응답 JSON 파싱 실패: ${err}\nresponse=${responseText}")
+        }
+    }
+}
+
+def parseTransferRequest(String description) {
+    if (!description?.trim()) {
+        error("Redmine description 이 비어 있습니다.")
+    }
+
+    def beginMarker = "[REQUEST_INFO]"
+    def endMarker = "[/REQUEST_INFO]"
+
+    def startIdx = description.indexOf(beginMarker)
+    def endIdx = description.indexOf(endMarker)
+
+    if (startIdx < 0 || endIdx < 0 || endIdx <= startIdx) {
+        error("REQUEST_INFO 블록을 찾지 못했습니다.")
+    }
+
+    def block = description.substring(startIdx + beginMarker.length(), endIdx).trim()
+    def lines = block.readLines()
+
+    def result = [:]
+    lines.each { line ->
+        def trimmed = line?.trim()
+        if (!trimmed || !trimmed.contains('=')) {
+            return
+        }
+        def idx = trimmed.indexOf('=')
+        def key = trimmed.substring(0, idx).trim()
+        def value = trimmed.substring(idx + 1).trim()
+        result[key] = value
+    }
+
+    if (!result.REQUEST_TYPE || result.REQUEST_TYPE != 'IMAGE_TRANSFER') {
+        error("REQUEST_TYPE 이 IMAGE_TRANSFER 가 아닙니다. value=${result.REQUEST_TYPE}")
+    }
+
+    return result
+}
+
+def loadTransferIssueFromRedmine(String issueId) {
+    def parsed = readRedmineIssue(issueId)
+    def issue = parsed?.issue
+
+    if (!issue) {
+        error("Redmine issue 정보가 없습니다. issueId=${issueId}")
+    }
+
+    env.REDMINE_TRANSFER_ISSUE_ID = issue.id?.toString() ?: issueId
+    env.REDMINE_TRANSFER_SUBJECT = issue.subject?.toString() ?: ''
+    env.REDMINE_TRANSFER_DESCRIPTION = issue.description?.toString() ?: ''
+    env.REDMINE_TRANSFER_STATUS_NAME = issue.status?.name?.toString() ?: ''
+    env.REDMINE_TRANSFER_STATUS_ID = issue.status?.id?.toString() ?: ''
+
+    def req = parseTransferRequest(env.REDMINE_TRANSFER_DESCRIPTION)
+
+    env.TRANSFER_REQUEST_TYPE = req.REQUEST_TYPE ?: ''
+    env.TRANSFER_SOURCE_REGISTRY = req.SOURCE_REGISTRY ?: ''
+    env.TRANSFER_SOURCE_IMAGE = req.SOURCE_IMAGE ?: ''
+    env.TRANSFER_SOURCE_REPOSITORY = req.SOURCE_REPOSITORY ?: ''
+    env.TRANSFER_TARGET_REGISTRY = req.TARGET_REGISTRY ?: ''
+    env.TRANSFER_TARGET_IMAGE = req.TARGET_IMAGE ?: ''
+    env.TRANSFER_TARGET_REPOSITORY = req.TARGET_REPOSITORY ?: ''
+    env.TRANSFER_IMAGE_TAG = req.IMAGE_TAG ?: ''
+    env.TRANSFER_SERVICE_NAME = req.SERVICE_NAME ?: ''
+    env.TRANSFER_GIT_BRANCH = req.GIT_BRANCH ?: ''
+    env.TRANSFER_GITOPS_PR_NUMBER = req.GITOPS_PR_NUMBER ?: ''
+    env.TRANSFER_ORIGIN_PIPELINE_ISSUE_ID = req.ORIGIN_PIPELINE_ISSUE_ID ?: ''
+    env.TRANSFER_ORIGIN_JOB_NAME = req.ORIGIN_JOB_NAME ?: ''
+    env.TRANSFER_ORIGIN_BUILD_NUMBER = req.ORIGIN_BUILD_NUMBER ?: ''
+    env.TRANSFER_ORIGIN_BUILD_URL = req.ORIGIN_BUILD_URL ?: ''
+
+    echo "Transfer issue loaded: ${env.REDMINE_TRANSFER_ISSUE_ID}"
+    echo "TRANSFER_SOURCE_IMAGE=${env.TRANSFER_SOURCE_IMAGE}"
+    echo "TRANSFER_TARGET_IMAGE=${env.TRANSFER_TARGET_IMAGE}"
+    echo "TRANSFER_IMAGE_TAG=${env.TRANSFER_IMAGE_TAG}"
+}
+
+def dockerTransferImage() {
+    stage('이미지 이관') {
+        if (!env.TRANSFER_SOURCE_IMAGE?.trim()) {
+            error("TRANSFER_SOURCE_IMAGE 값이 없습니다.")
+        }
+        if (!env.TRANSFER_TARGET_IMAGE?.trim()) {
+            error("TRANSFER_TARGET_IMAGE 값이 없습니다.")
+        }
+
+        updateTransferIssue(
+            """[이미지 이관] 시작
+- Source Image: ${env.TRANSFER_SOURCE_IMAGE}
+- Target Image: ${env.TRANSFER_TARGET_IMAGE}
+- Tag: ${env.TRANSFER_IMAGE_TAG}
+- Trigger Build: #${env.BUILD_NUMBER}
+- Trigger URL: ${env.BUILD_URL ?: ''}
+""",
+            10,
+            (env.REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS ?: "3") as Integer
+        )
+
+        container('docker-dind') {
+            withCredentials([
+                usernamePassword(
+                    credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                    usernameVariable: 'SRC_HARBOR_USER',
+                    passwordVariable: 'SRC_HARBOR_PASS'
+                ),
+                usernamePassword(
+                    credentialsId: env.TARGET_DOCKER_REGISTRY_CREDENTIALS_ID,
+                    usernameVariable: 'DST_HARBOR_USER',
+                    passwordVariable: 'DST_HARBOR_PASS'
+                )
+            ]) {
+                sh '''
+                    set -eux
+
+                    echo "$SRC_HARBOR_PASS" | docker login "$TRANSFER_SOURCE_REGISTRY" -u "$SRC_HARBOR_USER" --password-stdin
+                    echo "$DST_HARBOR_PASS" | docker login "$TRANSFER_TARGET_REGISTRY" -u "$DST_HARBOR_USER" --password-stdin
+
+                    docker pull "$TRANSFER_SOURCE_IMAGE"
+                    docker tag "$TRANSFER_SOURCE_IMAGE" "$TRANSFER_TARGET_IMAGE"
+                    docker push "$TRANSFER_TARGET_IMAGE"
+
+                    docker image rm "$TRANSFER_SOURCE_IMAGE" || true
+                    docker image rm "$TRANSFER_TARGET_IMAGE" || true
+                '''
+            }
+        }
+
+        updateTransferIssue(
+            """[이미지 이관] 완료
+- Source Image: ${env.TRANSFER_SOURCE_IMAGE}
+- Target Image: ${env.TRANSFER_TARGET_IMAGE}
+- Tag: ${env.TRANSFER_IMAGE_TAG}
+- Trigger Build: #${env.BUILD_NUMBER}
+- Trigger URL: ${env.BUILD_URL ?: ''}
+""",
+            100,
+            (env.REDMINE_TRANSFER_STATUS_ID_DONE ?: "4") as Integer
+        )
     }
 }
 
