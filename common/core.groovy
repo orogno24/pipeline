@@ -300,9 +300,11 @@ def checkout() {
         try {
             echo("===============[소스코드 체크아웃] 단계 시작===============")
 
+            def branchToCheckout = env.APP_GIT_BRANCH ?: 'dev'
+
             git(
                 url: env.GIT_URL,
-                branch: env.APP_GIT_BRANCH ?: env.GIT_BRANCH,
+                branch:  branchToCheckout,
                 credentialsId: env.GIT_CREDENTIALS_ID
             )
 
