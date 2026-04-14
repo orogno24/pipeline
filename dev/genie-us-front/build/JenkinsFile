@@ -116,7 +116,10 @@ pipeline {
                         }
 
                         dir(env.BUILD_CONTEXT) {
+                            core.nodeBuild()
                             core.dockerBuild()
+                            core.nodeSonarAnalysis()
+                            core.sonarAnalysisResult()
                         }
 
                         core.dockerPush()
