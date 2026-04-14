@@ -731,7 +731,7 @@ def createImageTransferIssue() {
                     tracker_id : 4,
                     subject    : subject,
                     description: description,
-                    status_id  : 13,  //개발배포중으로 이슈 생성
+                    status_id  : 8,  // 신규배포로 이슈 생성
                     done_ratio : 0
                 ]
             ]
