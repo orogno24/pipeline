@@ -712,6 +712,14 @@ def gitOpsDeploy() {
 def createImageTransferIssue() {
     stage('이미지 이관 요청 생성') {
         withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+            def redmineProjectId = env.REDMINE_TRANSFER_PROJECT_ID?.trim() ?: env.REDMINE_PIPELINE_PROJECT_ID?.trim()
+            def redmineTrackerId = env.REDMINE_TRANSFER_TRACKER_ID?.trim() ?: env.REDMINE_PIPELINE_TRACKER_ID?.trim() ?: "4"
+            def redmineStatusId  = env.REDMINE_TRANSFER_STATUS_ID_REQUESTED?.trim() ?: "1"
+
+            if (!redmineProjectId) {
+                error("REDMINE_TRANSFER_PROJECT_ID 또는 REDMINE_PIPELINE_PROJECT_ID 값이 없습니다.")
+            }
+
             def subject = "[이미지 이관 요청] ${env.JOB_NAME} - ${env.GIT_BRANCH} - ${env.APP_VERSION}"
 
             def description = """이미지 이관 요청
@@ -721,16 +729,16 @@ def createImageTransferIssue() {
 
 요약
 - Source Image: ${env.DOCKER_IMAGE_URL}:${env.APP_VERSION}
-- Target Image: 'harbor-prod.jtchinae-bank.co.kr/jtcsb/genie-us-front:'${env.APP_VERSION}
+- Target Image: ${env.TARGET_DOCKER_IMAGE_URL}:${env.APP_VERSION}
 """
 
             def payload = [
                 issue: [
-                    project_id : env.REDMINE_TRANSFER_PROJECT_ID,
-                    tracker_id : env.REDMINE_TRANSFER_TRACKER_ID ?: "4",
+                    project_id : redmineProjectId,
+                    tracker_id : redmineTrackerId,
                     subject    : subject,
                     description: description,
-                    status_id  : (env.REDMINE_TRANSFER_STATUS_ID_REQUESTED ?: "1"),
+                    status_id  : redmineStatusId,
                     done_ratio : 0
                 ]
             ]
