@@ -47,7 +47,7 @@ pipeline {
         TARGET_DOCKER_IMAGE_URL = 'harbor-prod.jtchinae-bank.co.kr/jtcsb/genie-us-front'
         TARGET_DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-prod-credentials'
 
-        // ── Redmine tracker / status (예시값, 실제 ID로 교체 필요) ─────
+        // ── Redmine tracker / status ─────
         REDMINE_PIPELINE_PROJECT_ID = 'jt-genie-front'
         REDMINE_PIPELINE_TRACKER_ID = '4'
 
