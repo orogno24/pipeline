@@ -21,9 +21,9 @@ def initEnv() {
         error("APP_NAME 환경변수가 없습니다.")
     }
 
-    env.GIT_URL                        = "http://gitea-http:3000/it-department/${appName}.git"
-    env.GIT_CREDENTIALS_ID             = 'gitea-credentials'
-    env.APP_GIT_BRANCH                 = 'dev'
+    env.APP_GIT_URL            = "http://gitea-http:3000/it-department/${appName}.git"
+    env.APP_GIT_CREDENTIALS_ID = 'gitea-credentials'
+    env.APP_GIT_BRANCH         = 'dev'
 
     env.GITOPS_URL                     = 'http://gitea-http:3000/Gitops/kustomize.git'
     env.GITOPS_PATH                    = 'gitea-http:3000/Gitops/kustomize.git'
@@ -303,9 +303,9 @@ def checkout() {
             def branchToCheckout = env.APP_GIT_BRANCH ?: 'dev'
 
             git(
-                url: env.GIT_URL,
-                branch:  branchToCheckout,
-                credentialsId: env.GIT_CREDENTIALS_ID
+                url: env.APP_GIT_URL,
+                branch: env.APP_GIT_BRANCH,
+                credentialsId: env.APP_GIT_CREDENTIALS_ID
             )
 
             env.APP_VERSION = sh(
