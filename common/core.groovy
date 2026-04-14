@@ -42,7 +42,7 @@ def createRedmineIssue(String status = "시작") {
         // Redmine API 전송을 위한 페이로드 구성
         def payload = [
             issue: [
-                project_id : env.REDMINE_PIPELINE_PROJECT_ID ?: "jt-genie-lam",
+                project_id : env.REDMINE_PIPELINE_PROJECT_ID,
                 tracker_id : (env.REDMINE_PIPELINE_TRACKER_ID ?: "4"),
                 subject    : subject,
                 description: description,
@@ -726,7 +726,7 @@ def createImageTransferIssue() {
 
             def payload = [
                 issue: [
-                    project_id : env.REDMINE_TRANSFER_PROJECT_ID ?: "jt-genie-lam",
+                    project_id : env.REDMINE_TRANSFER_PROJECT_ID,
                     tracker_id : env.REDMINE_TRANSFER_TRACKER_ID ?: "4",
                     subject    : subject,
                     description: description,
