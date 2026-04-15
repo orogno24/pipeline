@@ -1111,10 +1111,6 @@ def nodeSonarAnalysis() {
                     apt-get install -y openjdk-17-jre-headless
 
                     java -version
-                    node -v
-                    npm -v
-
-                    npm ci
                     npm run test:coverage
 
                     npx sonar-scanner \
