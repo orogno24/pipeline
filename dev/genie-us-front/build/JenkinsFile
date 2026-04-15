@@ -58,7 +58,7 @@ pipeline {
         GITOPS_PR_NUMBER = ''
         REDMINE_TRANSFER_ISSUE_ID = ''
         */
-        APP_NAME     = 'genie-us-front'
+        APP_NAME = 'genie-us-front'
     }
 
     stages {
@@ -115,10 +115,15 @@ pipeline {
                             return
                         }
 
-                        dir(env.BUILD_CONTEXT) {
-                            core.dockerBuild()
+                        container('node') {
+                            dir(env.BUILD_CONTEXT) {
+                                core.nodeBuild()
+                                core.nodeSonarAnalysis()
+                                core.sonarAnalysisResult()
+                            }
                         }
-
+                        
+                        core.dockerBuild()
                         core.dockerPush()
                         core.gitOpsDeploy()
                         core.createImageTransferIssue()
