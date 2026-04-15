@@ -1105,12 +1105,21 @@ def nodeSonarAnalysis() {
         try {
             withSonarQubeEnv('sonarqube') {
                 sh '''
+                    set -e
+
+                    apt-get update
+                    apt-get install -y openjdk-17-jre-headless
+
+                    java -version
+                    node -v
+                    npm -v
+
                     npm ci
                     npm run test:coverage
 
                     npx sonar-scanner \
                       -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                      -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+                      -Dsonar.projectName=${SONAR_PROJECT_NAME} \
                       -Dsonar.host.url=${SONAR_HOST_URL} \
                       -Dsonar.token=${SONAR_AUTH_TOKEN}
                 '''
