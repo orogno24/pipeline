@@ -12,7 +12,7 @@ pipeline {
                 [key: 'after',          value: '$.after'],
                 [key: 'COMMIT_MESSAGE', value: '$.commits[0].message']
             ],
-            token: 'dep-gups-ftc',
+            token: 'dep-postloan-ftc',
             regexpFilterText: '$ref',
             regexpFilterExpression: 'refs/heads/main'
         )
