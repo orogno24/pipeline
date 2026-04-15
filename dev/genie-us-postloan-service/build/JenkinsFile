@@ -51,7 +51,7 @@ pipeline {
 
         SKIP_BUILD = 'false'
         GITOPS_PR_NUMBER = ''
-        REDMINE_TRANSFER_ISSUE_ID = 
+        REDMINE_TRANSFER_ISSUE_ID = ''
     }
 
     stages {
