@@ -20,6 +20,7 @@ def initEnv() {
     if (!appName?.trim()) {
         error("APP_NAME 환경변수가 없습니다.")
     }
+    env.JENKINS_PUBLIC_URL = 'https://jenkins.jtchinae-bank.co.kr'
 
     env.REDMINE_URL    = 'http://redmine.cicd.svc.cluster.local'
     env.SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
@@ -64,6 +65,17 @@ def initEnv() {
     echo "initEnv() 완료: APP_NAME=${appName}"
 }
 
+def getPublicBuildUrl() {
+    def base = env.JENKINS_PUBLIC_URL?.trim()
+    if (!base) {
+        return env.BUILD_URL ?: ''
+    }
+
+    def normalizedBase = base.endsWith('/') ? base[0..-2] : base
+    def jobPath = env.JOB_NAME?.split('/')?.collect { "job/${it}" }?.join('/') ?: ''
+    return "${normalizedBase}/${jobPath}/${env.BUILD_NUMBER}/"
+}
+
 /**
  * Redmine에 새로운 이슈(티켓)를 생성하는 함수
  * 빌드 정보(프로젝트, 브랜치, 커밋 SHA 등)를 포함하여 생성함
@@ -86,7 +98,7 @@ def createRedmineIssue(String status = "시작") {
 커밋: ${commitSha}
 빌드 번호: ${env.BUILD_NUMBER}
 상태: ${status}
-빌드 URL: ${env.BUILD_URL ?: ''}
+빌드 URL: ${getPublicBuildUrl()}
 """
 
         // Redmine API 전송을 위한 페이로드 구성
@@ -259,7 +271,7 @@ def markStage(String stageName, String result, Integer doneRatio) {
 - Build: #${env.BUILD_NUMBER}
 - Branch: ${env.GIT_BRANCH}
 - Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
+- URL: ${getPublicBuildUrl()}
 """
     updateRedmineIssue(msg, doneRatio)
 }
@@ -275,7 +287,7 @@ def createOrUpdateStartIssue() {
 - Build: #${env.BUILD_NUMBER}
 - Branch: ${env.GIT_BRANCH}
 - Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
+- URL: ${getPublicBuildUrl()}
 """,
         5
     )
@@ -970,7 +982,7 @@ def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer stat
 - Build: #${env.BUILD_NUMBER}
 - Branch: ${env.GIT_BRANCH}
 - Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${env.BUILD_URL ?: ''}
+- URL: ${getPublicBuildUrl()}
 - SKIP_BUILD: ${env.SKIP_BUILD ?: 'false'}
 - GITOPS_PR_NUMBER: ${env.GITOPS_PR_NUMBER ?: ''}
 - TRANSFER_ISSUE_ID: ${env.REDMINE_TRANSFER_ISSUE_ID ?: ''}
@@ -1036,7 +1048,7 @@ def dockerTransferImage() {
 - Target Image: ${env.TRANSFER_TARGET_IMAGE}
 - Tag: ${env.TRANSFER_IMAGE_TAG}
 - Trigger Build: #${env.BUILD_NUMBER}
-- Trigger URL: ${env.BUILD_URL ?: ''}
+- Trigger URL: ${getPublicBuildUrl()}
 """,
             10,
             (env.REDMINE_TRANSFER_STATUS_ID_IN_PROGRESS ?: "3") as Integer
@@ -1077,7 +1089,7 @@ def dockerTransferImage() {
 - Target Image: ${env.TRANSFER_TARGET_IMAGE}
 - Tag: ${env.TRANSFER_IMAGE_TAG}
 - Trigger Build: #${env.BUILD_NUMBER}
-- Trigger URL: ${env.BUILD_URL ?: ''}
+- Trigger URL: ${getPublicBuildUrl()}
 """,
             100,
             (env.REDMINE_TRANSFER_STATUS_ID_DONE ?: "4") as Integer
