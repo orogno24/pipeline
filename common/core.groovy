@@ -926,6 +926,25 @@ def parseTransferRequest(String description) {
 def detectChanges() {
     markStage('변경 파일 감지', '시작', 21)
 
+    def hasPrevCommit = sh(
+        script: "git rev-parse --verify HEAD~1 >/dev/null 2>&1",
+        returnStatus: true
+    ) == 0
+
+    if (!hasPrevCommit) {
+        echo "첫 커밋입니다. detectChanges를 스킵하고 빌드를 진행합니다."
+        env.SKIP_BUILD = 'false'
+
+        updateRedmineIssue(
+            """[변경 파일 감지] 스킵
+- 사유: 첫 커밋(비교 대상 없음)
+- SKIP_BUILD: ${env.SKIP_BUILD}
+""",
+            25
+        )
+        return
+    }
+
     def changedFiles = sh(
         script: "git diff --name-only HEAD~1 HEAD || true",
         returnStdout: true
