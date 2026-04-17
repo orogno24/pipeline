@@ -1135,6 +1135,77 @@ def nodeSonarAnalysis() {
 }
 
 /**
+ * Dev 파이프라인의 공통 실행 흐름을 처리한다.
+ * FE/BE 차이는 buildType(node/gradle) 분기만 유지한다.
+ */
+def runDevBuildFlow(String buildType = 'gradle') {
+    def normalizedType = (buildType ?: 'gradle').toLowerCase()
+
+    try {
+        if (env.SKIP_BUILD == 'true') {
+            def skipDetail = normalizedType == 'node'
+                ? 'build/push/deploy 생략'
+                : 'build/sonar/docker/push/deploy 생략'
+
+            echo "변경 파일이 없어 ${skipDetail}합니다."
+            updateRedmineIssue(
+                """[Pipeline] 변경 파일 없음
+- ${skipDetail}
+- Branch: ${env.GIT_BRANCH}
+- Build: #${env.BUILD_NUMBER}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                100
+            )
+            return
+        }
+
+        if (normalizedType == 'node') {
+            container('node') {
+                dir(env.BUILD_CONTEXT) {
+                    nodeBuild()
+                    nodeSonarAnalysis()
+                    sonarAnalysisResult()
+                }
+            }
+            dockerBuild()
+            dockerPush()
+            gitOpsDeploy()
+            return
+        }
+
+        if (normalizedType == 'gradle') {
+            container('gradle') {
+                dir(env.BUILD_CONTEXT) {
+                    build()
+                    sonarAnalysis()
+                    sonarAnalysisResult()
+                }
+            }
+            dir(env.BUILD_CONTEXT) {
+                dockerBuild()
+            }
+            dockerPush()
+            gitOpsDeploy()
+            return
+        }
+
+        error("지원하지 않는 buildType 입니다. buildType=${normalizedType}")
+    } catch (err) {
+        echo "Pipeline execution failed: ${err}"
+        throw err
+    }
+}
+
+def finalizeDevPost(boolean isSuccess) {
+    if (isSuccess) {
+        updateRedminePost('성공', 100, 14)
+        return
+    }
+    updateRedminePost('실패', null, 15)
+}
+
+/**
  * 소스코드를 압축하여 FTC(File Transfer Center) 업로드 경로로 전송하는 단계
  * 저장소의 조직명(Org)과 앱 이름을 기반으로 아카이브 파일명을 생성함
  */
