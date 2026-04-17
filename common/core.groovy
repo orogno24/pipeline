@@ -924,48 +924,26 @@ def parseTransferRequest(String description) {
 }
 
 def detectChanges() {
-        markStage('변경 파일 감지', '시작', 21)
+    markStage('변경 파일 감지', '시작', 21)
 
-        if (!env.after?.trim() || env.after == 'null') {
-            echo "Webhook 변수가 없어 변경 파일 감지를 생략합니다. 수동 실행으로 간주합니다."
-            env.SKIP_BUILD = 'false'
-            updateRedmineIssue(
-                """[변경 파일 감지] webhook commit 정보 없음
-- 수동 실행으로 간주
-- SKIP_BUILD=false
-""",
-                23
-            )
-            return
-        }
+    def changedFiles = sh(
+        script: "git diff --name-only HEAD~1 HEAD || true",
+        returnStdout: true
+    ).trim()
 
-        def changedFiles = ''
+    echo "Changed files:\n${changedFiles}"
 
-        if (env.before?.trim() && env.before != 'null' && !env.before.startsWith('0000000')) {
-            changedFiles = sh(
-                script: "git diff --name-only ${env.before} ${env.after} || true",
-                returnStdout: true
-            ).trim()
-        } else {
-            changedFiles = sh(
-                script: "git diff-tree --no-commit-id --name-only -r ${env.after} || true",
-                returnStdout: true
-            ).trim()
-        }
+    env.SKIP_BUILD = changedFiles ? 'false' : 'true'
+    echo "SKIP_BUILD = ${env.SKIP_BUILD}"
 
-        echo "Changed files:\n${changedFiles}"
-
-        env.SKIP_BUILD = changedFiles ? 'false' : 'true'
-        echo "SKIP_BUILD = ${env.SKIP_BUILD}"
-
-        updateRedmineIssue(
-            """[변경 파일 감지] 성공
+    updateRedmineIssue(
+        """[변경 파일 감지] 성공
 - Changed Files:
 ${changedFiles ?: '없음'}
 - SKIP_BUILD: ${env.SKIP_BUILD}
 """,
-            25
-        )
+        25
+    )
 }
 
 def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer statusId = null) {
