@@ -1,5 +1,8 @@
-def ftcCore = load 'common/ftc.groovy'
-ftcCore.runFtcPipeline(
-    appName: 'genie-us-front',
-    triggerToken: 'dep-fe-ftc'
-)
+node {
+    checkout scm
+    def ftcCore = load 'common/ftc.groovy'
+    ftcCore.runFtcPipeline(
+        appName: 'genie-us-front',
+        triggerToken: 'dep-fe-ftc'
+    )
+}
