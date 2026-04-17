@@ -54,6 +54,7 @@ pipeline {
         BUILD_CONTEXT = '.'
         SOURCE_DIR = '.'
 
+        SKIP_BUILD = 'false'
         GITOPS_PR_NUMBER = ''
         REDMINE_TRANSFER_ISSUE_ID = ''
         */
@@ -88,10 +89,32 @@ pipeline {
             }
         }
 
+        stage('Detect Changes') {
+            steps {
+                script {
+                    core.detectChanges()
+                }
+            }
+        }
+
         stage('Load and Run') {
             steps {
                 script {
                     try {
+                        if (env.SKIP_BUILD == 'true') {
+                            echo "변경 파일이 없어 build/push/deploy를 생략합니다."
+                            core.updateRedmineIssue(
+                                """[Pipeline] 변경 파일 없음
+- build/push/deploy 생략
+- Branch: ${env.GIT_BRANCH}
+- Build: #${env.BUILD_NUMBER}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                                100
+                            )
+                            return
+                        }
+
                         container('node') {
                             dir(env.BUILD_CONTEXT) {
                                 core.nodeBuild()
