@@ -88,14 +88,6 @@ pipeline {
             }
         }
 
-        stage('Detect Changes') {
-            steps {
-                script {
-                    core.detectChanges()
-                }
-            }
-        }
-
         stage('Load and Run') {
             steps {
                 script {
