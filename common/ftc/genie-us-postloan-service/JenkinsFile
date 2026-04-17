@@ -1,5 +1,8 @@
-def ftcCore = load 'common/ftc.groovy'
-ftcCore.runFtcPipeline(
-    appName: 'genie-us-postloan-service',
-    triggerToken: 'dep-postloan-ftc'
-)
+node {
+    checkout scm
+    def ftcCore = load 'common/ftc.groovy'
+    ftcCore.runFtcPipeline(
+        appName: 'genie-us-postloan-service',
+        triggerToken: 'dep-postloan-ftc'
+    )
+}

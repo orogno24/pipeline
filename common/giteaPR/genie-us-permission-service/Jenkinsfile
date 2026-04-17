@@ -1,5 +1,8 @@
-def prCore = load 'common/gitea-pr.groovy'
-prCore.runGiteaPrPipeline(
-    triggerToken: 'gups-merge-approve-token',
-    redmineProjectId: 'genie-us-permission-service'
-)
+node {
+    checkout scm
+    def prCore = load 'common/gitea-pr.groovy'
+    prCore.runGiteaPrPipeline(
+        triggerToken: 'gups-merge-approve-token',
+        redmineProjectId: 'genie-us-permission-service'
+    )
+}
