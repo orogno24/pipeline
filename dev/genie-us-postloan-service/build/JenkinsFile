@@ -8,7 +8,53 @@ pipeline {
     }
 
     environment {
-        APP_NAME     = 'genie-us-postloan-service'        
+        /*
+        BUILD_TOOL = 'gradle'
+        REDMINE_URL = 'http://redmine.cicd.svc.cluster.local'
+
+        SONAR_HOST_URL = 'http://sonarqube-sonarqube.cicd.svc.cluster.local:9000'
+        SONAR_PROJECT_KEY = 'genie-us-postloan-service'
+        SONAR_PROJECT_NAME = 'genie-us-postloan-service'
+
+        // ── Git 소스 ─────────────────────────────────────────────────
+        GIT_URL = 'http://gitea-http:3000/it-department/genie-us-postloan-service.git'
+        GIT_CREDENTIALS_ID = 'gitea-credentials'
+        GIT_BRANCH = 'dev'
+
+        // ── GitOps 레포 (ArgoCD) ──────────────────────────────────────
+        GITOPS_URL = 'http://gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_PATH = 'gitea-http:3000/Gitops/kustomize.git'
+        GITOPS_API_URL = 'http://gitea-http:3000/api/v1/repos/Gitops/kustomize'
+        GITOPS_CREDENTIALS_ID = 'gitea-credentials'
+        GITOPS_BRANCH = 'main'
+        GITOPS_DIR = 'genie-us-postloan-service/overlay/dev'
+        GITOPS_CONTAINER_NAME = 'genie-us-postloan-service'
+
+        // ── Harbor 이미지 ─────────────────────────────────────────────
+        DOCKER_REGISTRY_URL = 'harbor-core:80'
+        DOCKER_REGISTRY_URL_OPS = 'harbor.jtchinae-bank.co.kr'
+        DOCKER_PROJECT_NAME = 'jtcsb'
+        DOCKER_IMAGE_NAME = 'jtcsb/genie-us-postloan-service'
+        DOCKER_REPO_NAME = 'genie-us-postloan-service'
+        DOCKER_IMAGE_URL = 'harbor.jtchinae-bank.co.kr/jtcsb/genie-us-postloan-service'
+        DOCKER_REGISTRY_CREDENTIALS_ID = 'harbor-jtcsb-credentials'
+
+        // ── Redmine tracker / status ─────
+        REDMINE_PIPELINE_PROJECT_ID = 'genie-us-postloan-service'
+        REDMINE_PIPELINE_TRACKER_ID = '4'
+
+        // ── 빌드 경로 ────────────────────────────────────────────────
+        BUILD_CONTEXT = '.'
+        SOURCE_DIR = '.'
+
+        SKIP_BUILD = 'false'
+        GITOPS_PR_NUMBER = ''
+        REDMINE_TRANSFER_ISSUE_ID = ''
+        
+        */
+        APP_NAME     = 'genie-us-postloan-service'
+
+        
     }
 
     stages {
@@ -50,7 +96,43 @@ pipeline {
         stage('Load and Run') {
             steps {
                 script {
-                    core.runDevBuildFlow('gradle')
+                    try {
+                        if (env.SKIP_BUILD == 'true') {
+                            echo "변경 파일이 없어 build/sonar/docker/push/deploy를 생략합니다."
+                            core.updateRedmineIssue(
+                                """[Pipeline] 변경 파일 없음
+- build/sonar/docker/push/deploy 생략
+- Branch: ${env.GIT_BRANCH}
+- Build: #${env.BUILD_NUMBER}
+- URL: ${env.BUILD_URL ?: ''}
+""",
+                                100
+                            )
+                            return
+                        }
+
+                        // 1. 빌드 및 품질 분석 (Gradle 환경)
+                        container('gradle') {
+                            dir(env.BUILD_CONTEXT) {
+                                core.build()
+                                core.sonarAnalysis()
+                                core.sonarAnalysisResult()
+                            }
+                        }
+
+                        // 2. 도커 이미지 빌드 및 푸시
+                        dir(env.BUILD_CONTEXT) {
+                            core.dockerBuild()
+                        }
+                        core.dockerPush()
+
+                        // 3. GitOps 배포 설정 업데이트
+                        core.gitOpsDeploy()
+
+                    } catch (err) {
+                        echo "Pipeline execution failed: ${err}"
+                        throw err
+                    }
                 }
             }
         }
@@ -60,7 +142,7 @@ pipeline {
         success {
             script {
                 if (core) {
-                    core.finalizeDevPost(true)
+                    core.updateRedminePost('성공', 100, 14)
                 } else {
                     echo "core not loaded; skip post Redmine update"
                 }
@@ -70,7 +152,7 @@ pipeline {
         failure {
             script {
                 if (core) {
-                    core.finalizeDevPost(false)
+                    core.updateRedminePost('실패', null, 15)
                 } else {
                     echo "core not loaded; skip post Redmine update"
                 }
