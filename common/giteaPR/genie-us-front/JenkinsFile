@@ -1,8 +1,40 @@
-node {
-    checkout scm
-    def prCore = load 'common/gitea-pr.groovy'
-    prCore.runGiteaPrPipeline(
-        triggerToken: 'guf-merge-approve-token',
-        redmineProjectId: 'genie-us-front'
-    )
+pipeline {
+    agent any
+
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'PR_ACTION', value: '$.action'],
+                [key: 'PR_NUMBER', value: '$.number'],
+                [key: 'PR_TITLE', value: '$.pull_request.title'],
+                [key: 'PR_FROM', value: '$.pull_request.head.label'],
+                [key: 'PR_TO', value: '$.pull_request.base.label'],
+                [key: 'REPO_NAME', value: '$.repository.name'],
+                [key: 'REPO_FULL', value: '$.repository.full_name'],
+                [key: 'GITEA_PR_URL', value: '$.pull_request.url']
+            ],
+            causeString: 'PR #$PR_NUMBER 생성됨',
+            token: 'guf-merge-approve-token',
+            regexpFilterText: '$PR_ACTION__$PR_TO',
+            regexpFilterExpression: 'opened__main'
+        )
+    }
+
+    stages {
+        stage('Run PR Pipeline') {
+            steps {
+                script {
+                    def prCore = load 'common/gitea-pr.groovy'
+                    prCore.createRedmineApprovalIssue(
+                        redmineProjectId: 'genie-us-front'
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        success { echo "승인 요청 완료 - ${REPO_NAME} PR #${PR_NUMBER}" }
+        failure { echo 'Redmine 이슈 생성 실패' }
+    }
 }
