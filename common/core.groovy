@@ -3,7 +3,7 @@ import groovy.json.JsonSlurperClassic
 
 /**
  * JSON 특수 문자 이스케이프 처리 함수
- */
+ */ 
 def jsonEscape(val) {
     if (val == null) return ""
     return val
