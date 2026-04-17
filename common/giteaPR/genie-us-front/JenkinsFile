@@ -1,5 +1,23 @@
-def prCore = load 'common/gitea-pr.groovy'
-prCore.runGiteaPrPipeline(
-    triggerToken: 'guf-merge-approve-token',
-    redmineProjectId: 'genie-us-front'
-)
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Run PR Pipeline') {
+            steps {
+                script {
+                    def prCore = load 'common/gitea-pr.groovy'
+                    prCore.runGiteaPrPipeline(
+                        triggerToken: 'guf-merge-approve-token',
+                        redmineProjectId: 'genie-us-front'
+                    )
+                }
+            }
+        }
+    }
+}
