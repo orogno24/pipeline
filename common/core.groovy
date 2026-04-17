@@ -924,7 +924,6 @@ def parseTransferRequest(String description) {
 }
 
 def detectChanges() {
-    dir(env.SOURCE_DIR) {
         markStage('변경 파일 감지', '시작', 21)
 
         if (!env.after?.trim() || env.after == 'null') {
@@ -967,7 +966,6 @@ ${changedFiles ?: '없음'}
 """,
             25
         )
-    }
 }
 
 def updateRedminePost(String resultLabel, Integer doneRatio = null, Integer statusId = null) {
