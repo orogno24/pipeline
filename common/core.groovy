@@ -1094,22 +1094,25 @@ def dockerTransferImage() {
 
 def nodeBuild() {
     stage('Node 빌드') {
-        echo("===============[Node 빌드] 단계 시작===============")
+         runStageWithRedmine('Node 빌드', 25, 40) {
+            echo("===============[Node 빌드] 단계 시작===============")
 
-        retry(3) {
-            sh 'node -v'
-            sh 'npm -v'
-            sh 'npm ci'
-            sh 'npm run build'
-        }
-
-        echo("===============[Node 빌드] 단계 종료===============")
+            retry(3) {
+                sh 'node -v'
+                sh 'npm -v'
+                sh 'npm ci'
+                sh 'npm run build'
+            }
+            echo("===============[Node 빌드] 단계 종료===============")
+         }
     }
 }
 
 def nodeSonarAnalysis() {
     stage('Node 정적 코드 분석') {
+        markStage('Node 정적 코드 분석', '시작', 60)
         try {
+            echo("===============[Node 정적 코드 분석] 단계 시작===============")
             withSonarQubeEnv('sonarqube') {
                 sh '''
                     set -e
@@ -1127,7 +1130,10 @@ def nodeSonarAnalysis() {
                       -Dsonar.token=${SONAR_AUTH_TOKEN}
                 '''
             }
+            markStage('Node 정적 코드 분석', '성공', 65)
+            echo("===============[Node 정적 코드 분석] 단계 종료===============")
         } catch (err) {
+            markStage('Node 정적 코드 분석', "실패 - ${err}", 60)
             echo("[Node 정적 코드 분석] 실패: ${err}")
             throw err
         }
