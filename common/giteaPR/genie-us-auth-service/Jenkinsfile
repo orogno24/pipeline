@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        PROJECT_ID = 'genie-us-auth-service'
+        APP_NAME = 'genie-us-auth-service'
         WEBHOOK_TOKEN = 'guas-merge-approve-token'
     }
 
@@ -30,7 +30,7 @@ pipeline {
                 script {
                     def core = load 'common/core.groovy'
                     core.initEnv()
-                    core.createMergeApprovalIssue(env.PROJECT_ID)
+                    core.createMergeApprovalIssue()
                 }
             }
         }

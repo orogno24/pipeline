@@ -296,15 +296,15 @@ def createOrUpdateStartIssue() {
 /**
  * Gitea PR Merge 승인용 Redmine 이슈를 생성하는 함수
  */
-def createMergeApprovalIssue(String projectId) {
-    if (!projectId?.trim()) {
-        error("projectId 값이 없습니다.")
+def createMergeApprovalIssue() {
+    if (!env.APP_NAME?.trim()) {
+        error("APP_NAME 값이 없습니다.")
     }
 
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
         def payload = [
             issue: [
-                project_id   : projectId,
+                project_id   : env.APP_NAME,
                 subject      : "[Merge 승인 요청] ${env.REPO_NAME} PR #${env.PR_NUMBER} - ${env.PR_TITLE}",
                 description  : "저장소: ${env.REPO_FULL}\\nBranch: ${env.PR_FROM} → ${env.PR_TO}\\nPR 번호: ${env.PR_NUMBER}\\nPR URL: ${env.GITEA_PR_URL}\\n\\n변경 사항은 위 PR 링크에서 확인할 수 있습니다.\\n\\n승인 시 상태를 승인으로 변경해주세요.",
                 status_id    : 1,
