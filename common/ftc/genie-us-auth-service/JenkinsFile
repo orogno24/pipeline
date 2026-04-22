@@ -5,14 +5,6 @@ pipeline {
         }
     }
 
-    environment {
-        APP_NAME        = 'genie-us-auth-service'
-        GIT_BRANCH_NAME = 'main'
-        GITEA_OWNER     = 'it-department'
-        REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
-        WEBHOOK_TOKEN = 'dep-guas-ftc'
-    }
-
     triggers {
         GenericTrigger(
             genericVariables: [
@@ -20,10 +12,17 @@ pipeline {
                 [key: 'after',          value: '$.after'],
                 [key: 'COMMIT_MESSAGE', value: '$.commits[0].message']
             ],
-            token: env.WEBHOOK_TOKEN,
+            token: 'dep-guas-ftc',
             regexpFilterText: '$ref',
             regexpFilterExpression: 'refs/heads/main'
         )
+    }
+
+    environment {
+        APP_NAME        = 'genie-us-auth-service'
+        GIT_BRANCH_NAME = 'main'
+        GITEA_OWNER     = 'it-department'
+        REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
     }
 
     stages {
