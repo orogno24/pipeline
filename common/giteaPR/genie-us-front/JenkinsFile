@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         APP_NAME      = 'genie-us-front'
-        WEBHOOK_TOKEN = 'guf-merge-approve-token'
+        WEBHOOK_TOKEN = 'guf-dev-merge'
     }
 
     triggers {
