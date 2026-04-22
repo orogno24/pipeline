@@ -5,6 +5,13 @@ pipeline {
         }
     }
 
+    environment {
+        APP_NAME        = 'genie-us-auth-service'
+        GIT_BRANCH_NAME = 'main'
+        GITEA_OWNER     = 'it-department'
+        REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
+    }
+
     triggers {
         GenericTrigger(
             genericVariables: [
@@ -16,13 +23,6 @@ pipeline {
             regexpFilterText: '$ref',
             regexpFilterExpression: 'refs/heads/main'
         )
-    }
-
-    environment {
-        APP_NAME        = 'genie-us-auth-service'
-        GIT_BRANCH_NAME = 'main'
-        GITEA_OWNER     = 'it-department'
-        REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
     }
 
     stages {
