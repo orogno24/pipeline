@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         APP_NAME     = 'genie-us-auth-service'
-        WEBHOOK_TOKEN = 'guas-merge-approve-token'
     }
 
     triggers {
@@ -19,7 +18,7 @@ pipeline {
                 [key: 'GITEA_PR_URL', value: '$.pull_request.url']
             ],
             causeString: 'PR #$PR_NUMBER 생성됨',
-            token: env.WEBHOOK_TOKEN,
+            token: 'guas-merge-approve-token',
             regexpFilterText: '$PR_ACTION__$PR_TO',
             regexpFilterExpression: 'opened__main'
         )
