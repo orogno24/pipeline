@@ -294,46 +294,6 @@ def createOrUpdateStartIssue() {
 }
 
 /**
- * Gitea PR Merge 승인용 Redmine 이슈를 생성하는 함수
- */
-def createMergeApprovalIssue() {
-    if (!env.APP_NAME?.trim()) {
-        error("APP_NAME 값이 없습니다.")
-    }
-
-    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-        def payload = [
-            issue: [
-                project_id   : env.APP_NAME,
-                subject      : "[Merge 승인 요청] ${env.REPO_NAME} PR #${env.PR_NUMBER} - ${env.PR_TITLE}",
-                description  : "저장소: ${env.REPO_FULL}\\nBranch: ${env.PR_FROM} → ${env.PR_TO}\\nPR 번호: ${env.PR_NUMBER}\\nPR URL: ${env.GITEA_PR_URL}\\n\\n변경 사항은 위 PR 링크에서 확인할 수 있습니다.\\n\\n승인 시 상태를 승인으로 변경해주세요.",
-                status_id    : 1,
-                priority_id  : 2,
-                tracker_id   : 4,
-                custom_fields: [
-                    [id: 1, value: "${env.PR_NUMBER}"],
-                    [id: 2, value: "${env.REPO_NAME}"]
-                ]
-            ]
-        ]
-
-        def response = httpRequest(
-            httpMode: 'POST',
-            url: "${env.REDMINE_URL}/issues.json",
-            customHeaders: [[
-                name: 'X-Redmine-API-Key',
-                value: "${REDMINE_API_KEY}"
-            ]],
-            contentType: 'APPLICATION_JSON',
-            requestBody: JsonOutput.toJson(payload)
-        )
-
-        echo "응답: ${response.content}"
-        echo "Redmine 이슈 생성 완료 - project_id: ${projectId}, PR: #${env.PR_NUMBER}"
-    }
-}
-
-/**
  * 각 Stage 실행 시 Redmine에 시작과 성공/실패 상태를 자동으로 업데이트하는 래퍼(Wrapper) 함수
  */
 def runStageWithRedmine(String stageName, Integer startRatio, Integer successRatio, Closure body) {
