@@ -5,6 +5,14 @@ pipeline {
         }
     }
 
+    environment {
+        APP_NAME        = 'genie-us-permission-service'
+        GIT_BRANCH_NAME = 'main'
+        GITEA_OWNER     = 'it-department'
+        REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
+        WEBHOOK_TOKEN   = 'dep-ps-ftc'
+    }
+
     triggers {
         GenericTrigger(
             genericVariables: [
@@ -12,18 +20,10 @@ pipeline {
                 [key: 'after',          value: '$.after'],
                 [key: 'COMMIT_MESSAGE', value: '$.commits[0].message']
             ],
-            token: 'dep-ps-ftc',
+            token: env.WEBHOOK_TOKEN,
             regexpFilterText: '$ref',
             regexpFilterExpression: 'refs/heads/main'
         )
-    }
-
-    environment {
-        APP_NAME         = 'genie-us-permission-service'
-        GIT_BRANCH_NAME  = 'main'
-        GITEA_OWNER      = 'it-department'
-        REDMINE_API_BASE = 'http://redmine.cicd.svc.cluster.local'
-        REDMINE_URL      = 'http://redmine.cicd.svc.cluster.local'
     }
 
     stages {
@@ -36,47 +36,18 @@ pipeline {
             }
         }
 
-        stage('Redmine 이슈 ID 파싱') {
-            steps {
-                script {
-                    def prNumber = extractPrNumber(env.COMMIT_MESSAGE)
-                    if (prNumber) {
-                        echo "PR 번호: ${prNumber}"
-                        withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
-                            def response = httpRequest(
-                                httpMode: 'GET',
-                                url: "http://redmine.cicd.svc.cluster.local/issues.json?cf_1=${prNumber}&tracker_id=4&status_id=9",
-                                customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]]
-                            )
-                            def json = readJSON text: response.content
-                            if (json.issues?.size() > 0) {
-                                env.REDMINE_ISSUE_ID = json.issues[0].id.toString()
-                                echo "Redmine Issue ID: ${env.REDMINE_ISSUE_ID}"
-                            } else {
-                                echo "Redmine 이슈 못 찾음"
-                            }
-                        }
-                    } else {
-                        echo "PR 번호 파싱 실패"
-                    }
-                }
-            }
-        }
-
-        stage('Checkout main') {
-            steps {
-                dir('source') {
-                    git branch: "${env.GIT_BRANCH_NAME}",
-                        url: "http://gitea-http:3000/${env.GITEA_OWNER}/${env.APP_NAME}.git",
-                        credentialsId: 'gitea-credentials'
-                }
-            }
-        }
-
-        stage('Load and Run') {
+        stage('FTC Transfer') {
             steps {
                 script {
                     def core = load 'common/core.groovy'
+                    env.REDMINE_ISSUE_ID = core.resolveFtcRedmineIssueId(env.COMMIT_MESSAGE) ?: ''
+
+                    dir('source') {
+                        git branch: "${env.GIT_BRANCH_NAME}",
+                            url: "http://gitea-http:3000/${env.GITEA_OWNER}/${env.APP_NAME}.git",
+                            credentialsId: 'gitea-credentials'
+                    }
+
                     core.transferSourceArchiveToFtc('source', env.GITEA_OWNER, env.APP_NAME)
                 }
             }
@@ -86,39 +57,15 @@ pipeline {
     post {
         success {
             script {
-                if (env.REDMINE_ISSUE_ID?.trim()) {
-                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
-                        httpRequest(
-                            httpMode: 'PUT',
-                            url: "${env.REDMINE_API_BASE}/issues/${env.REDMINE_ISSUE_ID}.json",
-                            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
-                            contentType: 'APPLICATION_JSON',
-                            requestBody: '{"issue": {"status_id": 10, "notes": "FTC 전송 완료"}}'
-                        )
-                    }
-                }
+                def core = load 'common/core.groovy'
+                core.updateFtcRedmineStatus(10, 'FTC transfer completed')
             }
         }
         failure {
             script {
-                if (env.REDMINE_ISSUE_ID?.trim()) {
-                    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
-                        httpRequest(
-                            httpMode: 'PUT',
-                            url: "${env.REDMINE_API_BASE}/issues/${env.REDMINE_ISSUE_ID}.json",
-                            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
-                            contentType: 'APPLICATION_JSON',
-                            requestBody: '{"issue": {"status_id": 12, "notes": "FTC 전송 실패"}}'
-                        )
-                    }
-                }
+                def core = load 'common/core.groovy'
+                core.updateFtcRedmineStatus(12, 'FTC transfer failed')
             }
         }
     }
-}
-
-@NonCPS
-def extractPrNumber(String msg) {
-    def matcher = msg =~ /\(#(\d+)\)/
-    return matcher.find() ? matcher.group(1) : null
 }

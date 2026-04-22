@@ -1203,6 +1203,60 @@ def transferSourceArchiveToFtc(String sourceDir = 'source', String orgName = '',
     }
 }
 
+@NonCPS
+def extractPrNumber(String msg) {
+    if (!msg?.trim()) {
+        return null
+    }
+
+    def matcher = msg =~ /\(#(\d+)\)/
+    return matcher.find() ? matcher.group(1) : null
+}
+
+def resolveFtcRedmineIssueId(String commitMessage) {
+    def prNumber = extractPrNumber(commitMessage)
+    if (!prNumber) {
+        echo "PR 번호 파싱 실패"
+        return null
+    }
+
+    echo "PR 번호: ${prNumber}"
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
+        def response = httpRequest(
+            httpMode: 'GET',
+            url: "${env.REDMINE_URL}/issues.json?cf_1=${prNumber}&tracker_id=4&status_id=9",
+            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]]
+        )
+        def json = readJSON text: response.content
+        if (json.issues?.size() > 0) {
+            def issueId = json.issues[0].id.toString()
+            echo "Redmine Issue ID: ${issueId}"
+            return issueId
+        }
+    }
+
+    echo "Redmine 이슈 못 찾음"
+    return null
+}
+
+def updateFtcRedmineStatus(Integer statusId, String note) {
+    if (!env.REDMINE_ISSUE_ID?.trim()) {
+        echo "REDMINE_ISSUE_ID 없음. FTC 상태 업데이트 생략"
+        return
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
+        httpRequest(
+            httpMode: 'PUT',
+            url: "${env.REDMINE_URL}/issues/${env.REDMINE_ISSUE_ID}.json",
+            customHeaders: [[name: 'X-Redmine-API-Key', value: KEY]],
+            contentType: 'APPLICATION_JSON',
+            requestBody: """{"issue": {"status_id": ${statusId}, "notes": "${jsonEscape(note)}"}}"""
+        )
+    }
+}
+
 def createMergeApprovalIssue() {
     if (!env.APP_NAME?.trim()) {
         error("APP_NAME 값이 없습니다.")
