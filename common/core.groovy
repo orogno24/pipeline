@@ -1221,6 +1221,7 @@ def resolveFtcRedmineIssueId(String commitMessage) {
     }
 
     echo "PR 번호: ${prNumber}"
+    def issueId = null
 
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'KEY')]) {
         def response = httpRequest(
@@ -1230,10 +1231,14 @@ def resolveFtcRedmineIssueId(String commitMessage) {
         )
         def json = readJSON text: response.content
         if (json.issues?.size() > 0) {
-            def issueId = json.issues[0].id.toString()
+            issueId = json.issues[0].id.toString()
             echo "Redmine Issue ID: ${issueId}"
-            return issueId
         }
+    }
+
+    if (issueId) {
+        env.REDMINE_ISSUE_ID = issueId
+        return issueId
     }
 
     echo "Redmine 이슈 못 찾음"
