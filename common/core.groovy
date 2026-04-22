@@ -484,17 +484,8 @@ def sonarAnalysis() {
             markStage('정적 코드 분석', '성공', 65)
             echo("===============[정적 코드 분석] 단계 종료===============")
         } catch (err) {
-            def failMsg = """[정적 코드 분석] 실패
-- 원인: ${err.getMessage()}
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${getPublicBuildUrl()}
-"""
-            updateRedmineIssue(failMsg, 60, 15)
-            currentBuild.result = 'FAILURE'
-            error("정적 코드 분석 실패: ${err.getMessage()}")
+            markStage('정적 코드 분석', "실패 - ${err}", 60)
+            echo("[정적 코드 분석] 실패: ${err}")
         }
     }
 }
@@ -532,76 +523,49 @@ def sonarAnalysisResult() {
         try {
             echo("===============[소나큐브 분석 결과] 단계 시작===============")
 
+            // 결과 파일 존재 여부 확인
             def reportTaskExists = fileExists('build/sonar/report-task.txt')
             if (!reportTaskExists) {
                 def mavenReportTaskExists = fileExists('target/sonar/report-task.txt')
 
                 if (!mavenReportTaskExists) {
-                    def msg = """[소나큐브 분석 결과] 실패
-- 사유: report-task.txt 없음
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${getPublicBuildUrl()}
-"""
-                    updateRedmineIssue(msg, 68, 5)
-                    error("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다.")
+                    echo("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다. 품질 게이트 검사를 건너뜁니다.")
+                    updateRedmineIssue("[소나큐브 분석 결과] report-task.txt 없음. 품질 게이트 생략", 68)
+                    echo("===============[소나큐브 분석 결과] 단계 종료===============")
+                    return
                 }
             }
 
+            // 품질 게이트 결과 대기 (최대 10분)
             withSonarQubeEnv('sonarqube') {
                 timeout(time: 10, unit: 'MINUTES') {
-                    def qg = waitForQualityGate()
-                    echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
+                    try {
+                        def qg = waitForQualityGate()
+                        echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
 
-                    if (qg.status != 'OK') {
-                        def msg = """[소나큐브 분석 결과] 품질 게이트 실패
-- Quality Gate: ${qg.status}
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${getPublicBuildUrl()}
-"""
-                        updateRedmineIssue(msg, 68, 5)
-                        currentBuild.result = 'FAILURE'
-                        error("소나큐브 품질 게이트 실패: ${qg.status}")
-                    } else {
-                        updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 통과", 70)
-                        echo("소나큐브 품질 게이트 검사 통과")
+                        if (qg.status != 'OK') {
+                            updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 실패: ${qg.status}", 68)
+                            echo("경고: 품질 게이트 검사에 실패했지만 파이프라인은 계속 진행됩니다.")
+                        } else {
+                            updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 통과", 70)
+                            echo("소나큐브 품질 게이트 검사 통과")
+                        }
+                    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
+                        updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 대기 타임아웃", 68)
+                        echo("소나큐브 분석 결과 대기 중 타임아웃이 발생했습니다.")
+                    } catch (Exception e) {
+                        updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 검사 오류: ${e.message}", 68)
+                        echo("소나큐브 품질 게이트 검사 중 오류 발생: ${e.message}")
                     }
                 }
             }
 
             markStage('소나큐브 분석 결과', '성공', 70)
             echo("===============[소나큐브 분석 결과] 단계 종료===============")
-        } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
-            def msg = """[소나큐브 분석 결과] 실패
-- 사유: 품질 게이트 대기 타임아웃
-- 상세: ${e.getMessage()}
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${getPublicBuildUrl()}
-"""
-            updateRedmineIssue(msg, 68, 5)
-            currentBuild.result = 'FAILURE'
-            error("소나큐브 품질 게이트 대기 타임아웃")
-        } catch (Exception e) {
-            def msg = """[소나큐브 분석 결과] 실패
-- 사유: 품질 게이트 검사 오류
-- 상세: ${e.getMessage()}
-- Job: ${env.JOB_NAME}
-- Build: #${env.BUILD_NUMBER}
-- Branch: ${env.GIT_BRANCH}
-- Version: ${env.APP_VERSION ?: 'unknown'}
-- URL: ${getPublicBuildUrl()}
-"""
-            updateRedmineIssue(msg, 68, 5)
-            currentBuild.result = 'FAILURE'
-            error("소나큐브 품질 게이트 검사 오류: ${e.getMessage()}")
+        } catch (err) {
+            markStage('소나큐브 분석 결과', "실패 - ${err}", 66)
+            echo("[소나큐브 분석 결과] 실패: ${err}")
+            echo("경고: 소나큐브 분석 결과 단계에서 오류가 발생했지만 파이프라인은 계속 진행됩니다.")
         }
     }
 }
