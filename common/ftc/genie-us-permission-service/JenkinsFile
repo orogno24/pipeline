@@ -10,7 +10,6 @@ pipeline {
         GIT_BRANCH_NAME = 'main'
         GITEA_OWNER     = 'it-department'
         REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
-        WEBHOOK_TOKEN   = 'dep-ps-ftc'
     }
 
     triggers {
@@ -20,7 +19,7 @@ pipeline {
                 [key: 'after',          value: '$.after'],
                 [key: 'COMMIT_MESSAGE', value: '$.commits[0].message']
             ],
-            token: env.WEBHOOK_TOKEN,
+            token: 'dep-ps-ftc',
             regexpFilterText: '$ref',
             regexpFilterExpression: 'refs/heads/main'
         )
