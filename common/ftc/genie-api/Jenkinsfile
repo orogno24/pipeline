@@ -1,0 +1,70 @@
+pipeline {
+    agent {
+        kubernetes {
+            label 'dind-ftc'
+        }
+    }
+
+    environment {
+        APP_NAME        = 'genie-api'
+        GIT_BRANCH_NAME = 'main'
+        GITEA_OWNER     = 'it-department'
+        REDMINE_URL     = 'http://redmine.cicd.svc.cluster.local'
+    }
+
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'ref',            value: '$.ref'],
+                [key: 'after',          value: '$.after'],
+                [key: 'COMMIT_MESSAGE', value: '$.commits[0].message']
+            ],
+            token: 'dep-genieapi-ftc',
+            regexpFilterText: '$ref',
+            regexpFilterExpression: 'refs/heads/main'
+        )
+    }
+
+    stages {
+        stage('Webhook Info') {
+            steps {
+                echo "Webhook received"
+                echo "ref = ${env.ref}"
+                echo "after = ${env.after}"
+                echo "APP_NAME = ${env.APP_NAME}"
+            }
+        }
+
+        stage('FTC Transfer') {
+            steps {
+                script {
+                    def core = load 'common/core.groovy'
+                    env.REDMINE_ISSUE_ID = core.resolveFtcRedmineIssueId(env.COMMIT_MESSAGE) ?: ''
+
+                    dir('source') {
+                        git branch: "${env.GIT_BRANCH_NAME}",
+                            url: "http://gitea-http:3000/${env.GITEA_OWNER}/${env.APP_NAME}.git",
+                            credentialsId: 'gitea-credentials'
+                    }
+
+                    core.transferSourceArchiveToFtc('source', env.GITEA_OWNER, env.APP_NAME)
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                def core = load 'common/core.groovy'
+                core.updateFtcRedmineStatus(10, 'FTC transfer completed')
+            }
+        }
+        failure {
+            script {
+                def core = load 'common/core.groovy'
+                core.updateFtcRedmineStatus(12, 'FTC transfer failed')
+            }
+        }
+    }
+}
