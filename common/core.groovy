@@ -38,7 +38,7 @@ def initEnv() {
     env.GITOPS_DIR                     = "${appName}/overlay/dev"
     env.GITOPS_CONTAINER_NAME          = appName
 
-    env.DOCKER_REGISTRY_URL            = 'harbor-core:80'
+    env.DOCKER_REGISTRY_URL            = 'harbor.jtchinae-bank.co.kr'
     env.DOCKER_REGISTRY_URL_OPS        = 'harbor.jtchinae-bank.co.kr'
     env.DOCKER_PROJECT_NAME            = 'jtcsb'
     env.DOCKER_IMAGE_NAME              = "jtcsb/${appName}"
