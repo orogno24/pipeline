@@ -1,5 +1,6 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurperClassic
+import java.net.URLEncoder
 
 /**
  * JSON 특수 문자 이스케이프 처리 함수
@@ -1392,10 +1393,7 @@ def uploadFileToRedmineIssue(
     }
 
     withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
-        def encodedFileName = sh(
-            script: "python3 - <<'PY'\nimport urllib.parse\nprint(urllib.parse.quote('''${fileName}'''))\nPY",
-            returnStdout: true
-        ).trim()
+        def encodedFileName = URLEncoder.encode(fileName, "UTF-8").replace("+", "%20") 
 
         def uploadHttpCode = sh(
             script: """
