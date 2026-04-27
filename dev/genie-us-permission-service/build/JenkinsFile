@@ -122,9 +122,6 @@ pipeline {
                             core.dockerBuild()
                         }
 
-                        // SBOM 생성 및 Redmine 첨부 업로드
-                        core.generateAndUploadSbom()
-
                         core.dockerPush()
 
                         // 3. GitOps 배포 설정 업데이트
