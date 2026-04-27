@@ -1298,4 +1298,174 @@ def createMergeApprovalIssue() {
     }
 }
 
+/**
+ * Syft로 Docker 이미지 SBOM을 생성하고 Redmine 이슈에 첨부하는 단계
+ */
+def generateAndUploadSbom() {
+    stage('SBOM 생성 및 Redmine 첨부') {
+        runStageWithRedmine('SBOM 생성 및 Redmine 첨부', 91, 94) {
+            echo("===============[SBOM 생성 및 Redmine 첨부] 단계 시작===============")
+
+            if (!env.REDMINE_ISSUE_ID?.trim()) {
+                error("REDMINE_ISSUE_ID 값이 없어 SBOM을 Redmine에 첨부할 수 없습니다.")
+            }
+
+            if (!env.APP_VERSION?.trim()) {
+                error("APP_VERSION 값이 없어 SBOM 파일명을 생성할 수 없습니다.")
+            }
+
+            def imageRef = "${env.DOCKER_REGISTRY_URL}/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+            def sbomDir = "dist/sbom"
+            def sbomFileName = "${env.APP_NAME}-${env.APP_VERSION}-sbom.cyclonedx.json"
+            def sbomFilePath = "${sbomDir}/${sbomFileName}"
+
+            container('docker-dind') {
+                sh """
+                    set -e
+
+                    mkdir -p "${sbomDir}"
+
+                    echo "SBOM target image: ${imageRef}"
+                    echo "SBOM output file: ${sbomFilePath}"
+
+                    # Syft 컨테이너를 이용해 Docker daemon 안의 이미지를 스캔합니다.
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "\$(pwd):/work" \
+                      anchore/syft:latest \
+                      "${imageRef}" \
+                      -o cyclonedx-json="/work/${sbomFilePath}"
+
+                    test -s "${sbomFilePath}"
+
+                    echo "SBOM generated:"
+                    ls -lh "${sbomFilePath}"
+                """
+            }
+
+            uploadFileToRedmineIssue(
+                env.REDMINE_ISSUE_ID,
+                sbomFilePath,
+                sbomFileName,
+                "application/json",
+                "Syft CycloneDX SBOM - ${env.APP_NAME}:${env.APP_VERSION}"
+            )
+
+            updateRedmineIssue(
+                """[SBOM] 생성 및 첨부 완료
+- Image: ${imageRef}
+- File: ${sbomFileName}
+- Format: CycloneDX JSON
+""",
+                94
+            )
+
+            echo("===============[SBOM 생성 및 Redmine 첨부] 단계 종료===============")
+        }
+    }
+}
+
+/**
+ * Redmine 이슈에 파일을 첨부하는 공통 함수
+ *
+ * Redmine 첨부 방식:
+ * 1) /uploads.json?filename=... 로 파일 업로드 후 token 수신
+ * 2) /issues/{issueId}.json 에 uploads token을 포함해 PUT
+ */
+def uploadFileToRedmineIssue(
+    String issueId,
+    String filePath,
+    String fileName,
+    String contentType = "application/octet-stream",
+    String description = ""
+) {
+    if (!issueId?.trim()) {
+        error("Redmine issueId 값이 없습니다.")
+    }
+
+    if (!filePath?.trim()) {
+        error("업로드할 filePath 값이 없습니다.")
+    }
+
+    if (!fileExists(filePath)) {
+        error("업로드할 파일이 존재하지 않습니다: ${filePath}")
+    }
+
+    withCredentials([string(credentialsId: 'redmine-api-key', variable: 'REDMINE_API_KEY')]) {
+        def encodedFileName = sh(
+            script: "python3 - <<'PY'\nimport urllib.parse\nprint(urllib.parse.quote('''${fileName}'''))\nPY",
+            returnStdout: true
+        ).trim()
+
+        def uploadHttpCode = sh(
+            script: """
+                set +e
+                curl -sS -o redmine_upload_response.json -w "%{http_code}" \\
+                  -X POST "\$REDMINE_URL/uploads.json?filename=${encodedFileName}" \\
+                  -H "X-Redmine-API-Key: \$REDMINE_API_KEY" \\
+                  -H "Content-Type: application/octet-stream" \\
+                  --data-binary "@${filePath}"
+            """,
+            returnStdout: true
+        ).trim()
+
+        def uploadResponseText = readFile('redmine_upload_response.json').trim()
+        echo "Redmine upload HTTP code: ${uploadHttpCode}"
+        echo "Redmine upload response: ${uploadResponseText}"
+
+        if (!(uploadHttpCode in ['200', '201'])) {
+            error("Redmine 파일 업로드 실패: HTTP ${uploadHttpCode}, response=${uploadResponseText}")
+        }
+
+        def parsedUpload
+        try {
+            parsedUpload = new JsonSlurperClassic().parseText(uploadResponseText)
+        } catch (err) {
+            error("Redmine upload 응답 JSON 파싱 실패: ${err}\\nresponse=${uploadResponseText}")
+        }
+
+        def token = parsedUpload?.upload?.token?.toString()
+        if (!token) {
+            error("Redmine upload token을 찾지 못했습니다. response=${uploadResponseText}")
+        }
+
+        def payload = [
+            issue: [
+                uploads: [[
+                    token       : token,
+                    filename    : fileName,
+                    content_type: contentType,
+                    description : description ?: fileName
+                ]]
+            ]
+        ]
+
+        writeFile(
+            file: 'redmine_attach_payload.json',
+            text: JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+        )
+
+        def attachHttpCode = sh(
+            script: """
+                set +e
+                curl -sS -o redmine_attach_response.txt -w "%{http_code}" \\
+                  -X PUT "\$REDMINE_URL/issues/${issueId}.json" \\
+                  -H "X-Redmine-API-Key: \$REDMINE_API_KEY" \\
+                  -H "Content-Type: application/json" \\
+                  --data @redmine_attach_payload.json
+            """,
+            returnStdout: true
+        ).trim()
+
+        def attachResponseText = readFile('redmine_attach_response.txt').trim()
+        echo "Redmine attach target issue: ${issueId}"
+        echo "Redmine attach HTTP code: ${attachHttpCode}"
+        echo "Redmine attach response: ${attachResponseText}"
+
+        if (!(attachHttpCode in ['200', '204'])) {
+            error("Redmine 첨부 연결 실패: issue=${issueId}, HTTP ${attachHttpCode}, response=${attachResponseText}")
+        }
+    }
+}
+
 return this
