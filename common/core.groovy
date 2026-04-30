@@ -1466,4 +1466,122 @@ def uploadFileToRedmineIssue(
     }
 }
 
+/**
+ * SonarQube 분석 결과에서 실패 상태가 나오면 파이프라인이 종료되도록 하는 단계
+ */
+def sonarAnalysisOrigin() {
+    stage('정적 코드 분석') {
+        markStage('정적 코드 분석', '시작', 60)
+        try {
+            echo("===============[정적 코드 분석] 단계 시작===============")
+
+            if (env.BUILD_TOOL == 'gradle') {
+                gradleSonarAnalysis()
+            } else if (env.BUILD_TOOL == 'maven') {
+                mavenSonarAnalysis()
+            } else {
+                error("지원하지 않는 빌드 도구입니다. BUILD_TOOL=${env.BUILD_TOOL}")
+            }
+
+            markStage('정적 코드 분석', '성공', 65)
+            echo("===============[정적 코드 분석] 단계 종료===============")
+        } catch (err) {
+            def failMsg = """[정적 코드 분석] 실패
+- 원인: ${err.getMessage()}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${getPublicBuildUrl()}
+"""
+            updateRedmineIssue(failMsg, 60, 5)   // statusId는 운영 중인 실패 상태값으로 바꾸세요
+            currentBuild.result = 'FAILURE'
+            error("정적 코드 분석 실패: ${err.getMessage()}")
+        }
+    }
+}
+
+/**
+ * SonarQube 분석 결과에서 실패 상태가 나오면 파이프라인이 종료되도록 하는 단계
+ */
+def sonarAnalysisResultOrigin() {
+    stage('소나큐브 분석 결과') {
+        markStage('소나큐브 분석 결과', '시작', 66)
+        try {
+            echo("===============[소나큐브 분석 결과] 단계 시작===============")
+
+            def reportTaskExists = fileExists('build/sonar/report-task.txt')
+            if (!reportTaskExists) {
+                def mavenReportTaskExists = fileExists('target/sonar/report-task.txt')
+
+                if (!mavenReportTaskExists) {
+                    def msg = """[소나큐브 분석 결과] 실패
+- 사유: report-task.txt 없음
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${getPublicBuildUrl()}
+"""
+                    updateRedmineIssue(msg, 68, 5)
+                    error("SonarQube 분석 결과 파일(report-task.txt)이 존재하지 않습니다.")
+                }
+            }
+
+            withSonarQubeEnv('sonarqube') {
+                timeout(time: 10, unit: 'MINUTES') {
+                    def qg = waitForQualityGate()
+                    echo("소나큐브 품질 게이트 검사 결과: ${qg.status}")
+
+                    if (qg.status != 'OK') {
+                        def msg = """[소나큐브 분석 결과] 품질 게이트 실패
+- Quality Gate: ${qg.status}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${getPublicBuildUrl()}
+"""
+                        updateRedmineIssue(msg, 68, 5)
+                        currentBuild.result = 'FAILURE'
+                        error("소나큐브 품질 게이트 실패: ${qg.status}")
+                    } else {
+                        updateRedmineIssue("[소나큐브 분석 결과] 품질 게이트 통과", 70)
+                        echo("소나큐브 품질 게이트 검사 통과")
+                    }
+                }
+            }
+
+            markStage('소나큐브 분석 결과', '성공', 70)
+            echo("===============[소나큐브 분석 결과] 단계 종료===============")
+        } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
+            def msg = """[소나큐브 분석 결과] 실패
+- 사유: 품질 게이트 대기 타임아웃
+- 상세: ${e.getMessage()}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${getPublicBuildUrl()}
+"""
+            updateRedmineIssue(msg, 68, 5)
+            currentBuild.result = 'FAILURE'
+            error("소나큐브 품질 게이트 대기 타임아웃")
+        } catch (Exception e) {
+            def msg = """[소나큐브 분석 결과] 실패
+- 사유: 품질 게이트 검사 오류
+- 상세: ${e.getMessage()}
+- Job: ${env.JOB_NAME}
+- Build: #${env.BUILD_NUMBER}
+- Branch: ${env.GIT_BRANCH}
+- Version: ${env.APP_VERSION ?: 'unknown'}
+- URL: ${getPublicBuildUrl()}
+"""
+            updateRedmineIssue(msg, 68, 5)
+            currentBuild.result = 'FAILURE'
+            error("소나큐브 품질 게이트 검사 오류: ${e.getMessage()}")
+        }
+    }
+}
+
 return this
